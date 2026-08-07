@@ -189,16 +189,12 @@
     <form id="lookupForm" autocomplete="off">
       <div class="field">
         <label for="maBH">Mã bảo hành</label>
-        <input type="text" id="maBH" placeholder="VD: BH-2026-00123" required maxlength="40">
-      </div>
-      <div class="field">
-        <label for="sdt">Số điện thoại</label>
-        <input type="tel" id="sdt" placeholder="VD: 0901234567" required maxlength="15">
+        <input type="text" id="maBH" placeholder="VD: BH-2026-A7K2X" required maxlength="40">
       </div>
       <button type="submit" id="submitBtn">Tra cứu</button>
     </form>
 
-    <div class="hint">Thông tin chỉ hiển thị khi mã bảo hành và số điện thoại khớp với dữ liệu đã đăng ký.</div>
+    <div class="hint">Mã bảo hành được in trên phiếu bảo hành hoặc gửi qua Zalo khi bạn mua hàng.</div>
 
     <div class="error-box" id="errorBox"></div>
 
@@ -251,10 +247,9 @@
     lastSubmit = now;
 
     const maBH = document.getElementById("maBH").value.trim();
-    const sdt = document.getElementById("sdt").value.trim();
 
-    if (!maBH || !sdt) {
-      showError("Vui lòng nhập đầy đủ mã bảo hành và số điện thoại.");
+    if (!maBH) {
+      showError("Vui lòng nhập mã bảo hành.");
       return;
     }
 
@@ -267,7 +262,7 @@
       const res = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" }, // tránh CORS preflight với Apps Script
-        body: JSON.stringify({ maBaoHanh: maBH, soDienThoai: sdt })
+        body: JSON.stringify({ maBaoHanh: maBH })
       });
 
       if (!res.ok) throw new Error("network");
