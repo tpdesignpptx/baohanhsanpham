@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tra cứu bảo hành</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self' https://script.google.com https://script.googleusercontent.com;">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#0b0b14;
+    --bg-1:#12121f;
+    --card:rgba(255,255,255,0.05);
+    --card-border:rgba(255,255,255,0.10);
+    --purple:#8b5cf6;
+    --cyan:#22d3ee;
+    --text:#f1f1f6;
+    --text-dim:#9a9aad;
+    --ok:#34d399;
+    --warn:#fbbf24;
+    --err:#f87171;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'Be Vietnam Pro', sans-serif;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(139,92,246,0.18), transparent 45%),
+      radial-gradient(circle at 85% 85%, rgba(34,211,238,0.14), transparent 45%),
+      var(--bg-0);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  .wrap{ width:100%; max-width:460px; }
+  .logo{
+    text-align:center;
+    margin-bottom:28px;
+  }
+  .logo h1{
+    font-size:22px;
+    font-weight:800;
+    background:linear-gradient(90deg, var(--purple), var(--cyan));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+    letter-spacing:0.3px;
+  }
+  .logo p{ color:var(--text-dim); font-size:13px; margin-top:6px; }
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--card-border);
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+    border-radius:20px;
+    padding:28px 24px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.35);
+  }
+
+  label{ font-size:13px; font-weight:600; color:var(--text-dim); display:block; margin-bottom:6px; }
+  .field{ margin-bottom:16px; }
+  input{
+    width:100%;
+    padding:13px 14px;
+    border-radius:12px;
+    border:1px solid var(--card-border);
+    background:rgba(255,255,255,0.04);
+    color:var(--text);
+    font-family:inherit;
+    font-size:15px;
+    outline:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  input::placeholder{ color:#5c5c6e; }
+  input:focus{
+    border-color:var(--purple);
+    box-shadow:0 0 0 3px rgba(139,92,246,0.18);
+  }
+
+  button{
+    width:100%;
+    padding:14px;
+    border:none;
+    border-radius:12px;
+    background:linear-gradient(90deg, var(--purple), var(--cyan));
+    color:#0b0b14;
+    font-family:inherit;
+    font-weight:700;
+    font-size:15px;
+    cursor:pointer;
+    margin-top:6px;
+    transition:opacity .15s, transform .1s;
+  }
+  button:hover{ opacity:0.92; }
+  button:active{ transform:scale(0.98); }
+  button:disabled{ opacity:0.5; cursor:not-allowed; }
+
+  .hint{
+    text-align:center;
+    font-size:12px;
+    color:var(--text-dim);
+    margin-top:14px;
+    line-height:1.5;
+  }
+
+  .result{
+    margin-top:20px;
+    padding-top:20px;
+    border-top:1px solid var(--card-border);
+    display:none;
+  }
+  .result.show{ display:block; animation:fadeIn .25s ease; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+
+  .status-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:6px 12px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:700;
+    margin-bottom:14px;
+  }
+  .status-badge.ok{ background:rgba(52,211,153,0.15); color:var(--ok); border:1px solid rgba(52,211,153,0.3); }
+  .status-badge.warn{ background:rgba(251,191,36,0.15); color:var(--warn); border:1px solid rgba(251,191,36,0.3); }
+  .status-badge.err{ background:rgba(248,113,113,0.15); color:var(--err); border:1px solid rgba(248,113,113,0.3); }
+  .dot{ width:7px; height:7px; border-radius:50%; background:currentColor; }
+
+  .info-row{
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    padding:10px 0;
+    border-bottom:1px dashed var(--card-border);
+    font-size:14px;
+  }
+  .info-row:last-child{ border-bottom:none; }
+  .info-row .k{ color:var(--text-dim); }
+  .info-row .v{ font-weight:600; text-align:right; }
+
+  .error-box{
+    margin-top:20px;
+    padding:14px 16px;
+    border-radius:12px;
+    background:rgba(248,113,113,0.1);
+    border:1px solid rgba(248,113,113,0.25);
+    color:var(--err);
+    font-size:13.5px;
+    display:none;
+    line-height:1.5;
+  }
+  .error-box.show{ display:block; }
+
+  .spinner{
+    width:16px; height:16px;
+    border:2px solid rgba(11,11,20,0.3);
+    border-top-color:#0b0b14;
+    border-radius:50%;
+    display:inline-block;
+    animation:spin .6s linear infinite;
+    vertical-align:middle;
+    margin-right:8px;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  footer{
+    text-align:center;
+    color:var(--text-dim);
+    font-size:11.5px;
+    margin-top:22px;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="logo">
+    <h1>TRA CỨU BẢO HÀNH</h1>
+    <p>Nhập mã bảo hành và số điện thoại đã đăng ký</p>
+  </div>
+
+  <div class="card">
+    <form id="lookupForm" autocomplete="off">
+      <div class="field">
+        <label for="maBH">Mã bảo hành</label>
+        <input type="text" id="maBH" placeholder="VD: BH-2026-00123" required maxlength="40">
+      </div>
+      <div class="field">
+        <label for="sdt">Số điện thoại</label>
+        <input type="tel" id="sdt" placeholder="VD: 0901234567" required maxlength="15">
+      </div>
+      <button type="submit" id="submitBtn">Tra cứu</button>
+    </form>
+
+    <div class="hint">Thông tin chỉ hiển thị khi mã bảo hành và số điện thoại khớp với dữ liệu đã đăng ký.</div>
+
+    <div class="error-box" id="errorBox"></div>
+
+    <div class="result" id="resultBox">
+      <span class="status-badge" id="statusBadge"><span class="dot"></span><span id="statusText"></span></span>
+      <div class="info-row"><span class="k">Sản phẩm</span><span class="v" id="rSanPham">—</span></div>
+      <div class="info-row"><span class="k">Ngày mua</span><span class="v" id="rNgayMua">—</span></div>
+      <div class="info-row"><span class="k">Thời hạn bảo hành</span><span class="v" id="rThoiHan">—</span></div>
+      <div class="info-row"><span class="k">Hết hạn vào</span><span class="v" id="rHetHan">—</span></div>
+      <div class="info-row"><span class="k">Ghi chú</span><span class="v" id="rGhiChu">—</span></div>
+    </div>
+  </div>
+
+  <footer>© 2026 · Hệ thống tra cứu bảo hành</footer>
+</div>
+
+<script>
+  // ==== CẤU HÌNH ====
+  // Dán URL Web App Apps Script của bạn vào đây (xem file code.gs kèm theo để deploy)
+  const API_URL = "https://script.google.com/macros/s/AKfycbzqqj7KQYpAMR_FL8K6eWQdW76H4f78UQ-TqrKJJGFyUyerlxf1n9s_mtHDDocGTJYhkw/exec";
+
+  // Escape để chống XSS khi hiển thị dữ liệu từ Google Sheets
+  function esc(str){
+    if (str === null || str === undefined) return "—";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  const form = document.getElementById("lookupForm");
+  const submitBtn = document.getElementById("submitBtn");
+  const errorBox = document.getElementById("errorBox");
+  const resultBox = document.getElementById("resultBox");
+
+  // Chống spam click / brute-force phía client (rate limit đơn giản)
+  let lastSubmit = 0;
+  const MIN_INTERVAL_MS = 3000;
+
+  form.addEventListener("submit", async function(e){
+    e.preventDefault();
+
+    const now = Date.now();
+    if (now - lastSubmit < MIN_INTERVAL_MS) {
+      showError("Vui lòng đợi vài giây trước khi tra cứu lại.");
+      return;
+    }
+    lastSubmit = now;
+
+    const maBH = document.getElementById("maBH").value.trim();
+    const sdt = document.getElementById("sdt").value.trim();
+
+    if (!maBH || !sdt) {
+      showError("Vui lòng nhập đầy đủ mã bảo hành và số điện thoại.");
+      return;
+    }
+
+    errorBox.classList.remove("show");
+    resultBox.classList.remove("show");
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner"></span>Đang tra cứu...';
+
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" }, // tránh CORS preflight với Apps Script
+        body: JSON.stringify({ maBaoHanh: maBH, soDienThoai: sdt })
+      });
+
+      if (!res.ok) throw new Error("network");
+
+      const data = await res.json();
+
+      if (!data.found) {
+        showError(data.message || "Không tìm thấy thông tin bảo hành khớp với mã và số điện thoại đã nhập. Vui lòng kiểm tra lại.");
+        return;
+      }
+
+      renderResult(data);
+    } catch (err) {
+      showError("Có lỗi xảy ra khi kết nối hệ thống. Vui lòng thử lại sau ít phút.");
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Tra cứu";
+    }
+  });
+
+  function showError(msg){
+    errorBox.textContent = msg;
+    errorBox.classList.add("show");
+    resultBox.classList.remove("show");
+  }
+
+  function renderResult(data){
+    document.getElementById("rSanPham").textContent = esc(data.sanPham);
+    document.getElementById("rNgayMua").textContent = esc(data.ngayMua);
+    document.getElementById("rThoiHan").textContent = esc(data.thoiHanBaoHanh);
+    document.getElementById("rHetHan").textContent = esc(data.ngayHetHan);
+    document.getElementById("rGhiChu").textContent = esc(data.ghiChu);
+
+    const badge = document.getElementById("statusBadge");
+    const statusText = document.getElementById("statusText");
+    badge.className = "status-badge " + (data.conBaoHanh ? "ok" : "err");
+    statusText.textContent = data.conBaoHanh ? "Còn bảo hành" : "Đã hết hạn bảo hành";
+
+    resultBox.classList.add("show");
+  }
+</script>
+
+</body>
+</html>
