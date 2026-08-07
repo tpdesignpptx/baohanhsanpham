@@ -275,7 +275,9 @@
       const data = await res.json();
 
       if (!data.found) {
-        showError(data.message || "Không tìm thấy thông tin bảo hành khớp với mã và số điện thoại đã nhập. Vui lòng kiểm tra lại.");
+        // DEBUG: đang nối thêm data.debug vào để xem lỗi thật. Bỏ dòng này đi sau khi sửa xong.
+        const msg = (data.message || "Không tìm thấy thông tin bảo hành khớp với mã và số điện thoại đã nhập.") + (data.debug ? " [Debug: " + data.debug + "]" : "");
+        showError(msg);
         return;
       }
 
