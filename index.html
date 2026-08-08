@@ -197,7 +197,7 @@
 <script>
   // ==== CẤU HÌNH ====
   // Dán URL Web App Apps Script của bạn vào đây (đuôi /exec)
-  const API_URL = "https://script.google.com/macros/s/AKfycbzGOlPl-7XMp9K6v_f5K9wJ7yRz9mXFI8RCwYLilH-jQsdzocs5eDx0LiS0hmR-rNh4cA/exec";
+  const API_URL = "DÁN_LINK_/exec_CỦA_BẠN_VÀO_ĐÂY";
 
   function esc(str){
     if (str === null || str === undefined || str === '') return "—";
@@ -252,7 +252,7 @@
         actError.classList.add("show");
       } else {
         document.getElementById("actRSanPham").textContent = esc(data.product);
-        document.getElementById("actRThoiHan").textContent = esc(data.duration) + " tháng";
+        document.getElementById("actRThoiHan").textContent = esc(data.duration);
         document.getElementById("actRNgayKH").textContent = esc(data.activateDate);
         document.getElementById("actRHetHan").textContent = esc(data.expireDate);
         actResult.classList.add("show");
