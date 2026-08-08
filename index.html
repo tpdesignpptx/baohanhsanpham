@@ -233,10 +233,6 @@
           <input type="tel" id="actPhone" placeholder="09xxxxxxxx" required>
         </div>
         <div class="field">
-          <label for="actProduct">Sản phẩm đã mua</label>
-          <input type="text" id="actProduct" placeholder="VD: Máy lọc nước X1" required>
-        </div>
-        <div class="field">
           <label for="actCode">Mã bảo hành</label>
           <input type="text" id="actCode" placeholder="VD: BH-2026-00001" required style="text-transform:uppercase">
         </div>
@@ -339,7 +335,6 @@
         action: "activate",
         name: document.getElementById("actName").value.trim(),
         phone: document.getElementById("actPhone").value.trim(),
-        product: document.getElementById("actProduct").value.trim(),
         code: document.getElementById("actCode").value.trim()
       });
 
