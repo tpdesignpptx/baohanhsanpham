@@ -20,6 +20,7 @@
     --err:#f87171;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
+  html, body{ height:100%; }
   body{
     font-family:'Be Vietnam Pro', sans-serif;
     background:
@@ -32,8 +33,39 @@
     align-items:center;
     justify-content:center;
     padding:24px;
+    overflow-x:hidden;
   }
-  .wrap{ width:100%; max-width:460px; }
+
+  /* ===== LOADER MÀN HÌNH TẢI TRANG ===== */
+  #loader{
+    position:fixed; inset:0; z-index:999;
+    background:var(--bg-0);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:18px;
+    transition:opacity .5s ease, visibility .5s ease;
+  }
+  #loader.hide{ opacity:0; visibility:hidden; pointer-events:none; }
+  .loader-ring{
+    width:52px; height:52px; border-radius:50%;
+    border:3px solid rgba(255,255,255,0.08);
+    border-top-color:var(--purple);
+    border-right-color:var(--cyan);
+    animation:spin .9s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .loader-text{
+    font-size:13px; font-weight:600; color:var(--text-dim);
+    letter-spacing:0.3px;
+  }
+
+  /* Nội dung chính chỉ hiện dần sau khi loader biến mất */
+  #mainContent{
+    width:100%; max-width:460px;
+    opacity:0; transform:translateY(14px);
+    transition:opacity .6s ease, transform .6s ease;
+  }
+  #mainContent.show{ opacity:1; transform:translateY(0); }
+
   .logo{ text-align:center; margin-bottom:24px; }
   .logo h1{
     font-size:22px; font-weight:800;
@@ -85,9 +117,57 @@
 
   .hint{ text-align:center; font-size:12px; color:var(--text-dim); margin-top:14px; line-height:1.5; }
 
-  .result{ margin-top:20px; padding-top:20px; border-top:1px solid var(--card-border); display:none; }
-  .result.show{ display:block; animation:fadeIn .25s ease; }
-  @keyframes fadeIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  /* ===== LIQUID GLASS - khung hiển thị thông tin bảo hành ===== */
+  .result{
+    margin-top:20px; display:none;
+    position:relative; overflow:hidden;
+    border-radius:18px;
+    padding:22px 20px;
+    background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.14);
+    backdrop-filter:blur(22px) saturate(160%);
+    -webkit-backdrop-filter:blur(22px) saturate(160%);
+    box-shadow:
+      0 8px 30px rgba(0,0,0,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.16),
+      inset 0 0 40px rgba(139,92,246,0.06);
+  }
+  .result.show{ display:block; animation:liquidIn .5s cubic-bezier(.22,1,.36,1); }
+  @keyframes liquidIn{
+    from{ opacity:0; transform:translateY(10px) scale(.97); }
+    to{ opacity:1; transform:translateY(0) scale(1); }
+  }
+  /* các "giọt" ánh sáng loang nhẹ phía sau, tạo cảm giác chất lỏng */
+  .result::before, .result::after{
+    content:""; position:absolute; border-radius:50%;
+    filter:blur(30px); opacity:0.35; pointer-events:none;
+    animation:liquidFloat 7s ease-in-out infinite;
+  }
+  .result::before{
+    width:140px; height:140px; background:var(--purple);
+    top:-50px; left:-40px; animation-delay:0s;
+  }
+  .result::after{
+    width:120px; height:120px; background:var(--cyan);
+    bottom:-40px; right:-30px; animation-delay:2.5s;
+  }
+  @keyframes liquidFloat{
+    0%, 100%{ transform:translate(0,0) scale(1); }
+    50%{ transform:translate(12px,-10px) scale(1.12); }
+  }
+  /* vệt sáng chạy nhẹ trên viền, hiệu ứng kính lỏng */
+  .result .sheen{
+    position:absolute; inset:0; border-radius:18px; pointer-events:none;
+    background:linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.10) 45%, transparent 60%);
+    background-size:220% 220%;
+    animation:sheenMove 4.5s ease-in-out infinite;
+  }
+  @keyframes sheenMove{
+    0%{ background-position:120% 0%; }
+    50%{ background-position:0% 100%; }
+    100%{ background-position:120% 0%; }
+  }
+  .result > *{ position:relative; z-index:1; }
 
   .status-badge{
     display:inline-flex; align-items:center; gap:6px; padding:6px 12px;
@@ -99,7 +179,7 @@
 
   .info-row{
     display:flex; justify-content:space-between; gap:12px; padding:10px 0;
-    border-bottom:1px dashed var(--card-border); font-size:14px;
+    border-bottom:1px dashed rgba(255,255,255,0.12); font-size:14px;
   }
   .info-row:last-child{ border-bottom:none; }
   .info-row .k{ color:var(--text-dim); }
@@ -117,14 +197,18 @@
     border-top-color:#0b0b14; border-radius:50%; display:inline-block;
     animation:spin .6s linear infinite; vertical-align:middle; margin-right:8px;
   }
-  @keyframes spin{ to{ transform:rotate(360deg); } }
 
   footer{ text-align:center; color:var(--text-dim); font-size:11.5px; margin-top:22px; }
 </style>
 </head>
 <body>
 
-<div class="wrap">
+<div id="loader">
+  <div class="loader-ring"></div>
+  <div class="loader-text">Đang tải hệ thống bảo hành...</div>
+</div>
+
+<div id="mainContent">
   <div class="logo">
     <h1>BẢO HÀNH SẢN PHẨM</h1>
     <p>Kích hoạt hoặc tra cứu tình trạng bảo hành</p>
@@ -161,6 +245,7 @@
       <div class="hint">Mỗi mã bảo hành chỉ kích hoạt được 1 lần duy nhất.</div>
       <div class="error-box" id="actError"></div>
       <div class="result" id="actResult">
+        <div class="sheen"></div>
         <span class="status-badge ok"><span class="dot"></span>Kích hoạt thành công</span>
         <div class="info-row"><span class="k">Sản phẩm</span><span class="v" id="actRSanPham">—</span></div>
         <div class="info-row"><span class="k">Thời hạn</span><span class="v" id="actRThoiHan">—</span></div>
@@ -181,6 +266,7 @@
       <div class="hint">Mã bảo hành được in trên phiếu bảo hành hoặc gửi qua Zalo khi bạn mua hàng.</div>
       <div class="error-box" id="lkError"></div>
       <div class="result" id="lkResult">
+        <div class="sheen"></div>
         <span class="status-badge" id="lkBadge"><span class="dot"></span><span id="lkStatusText"></span></span>
         <div class="info-row"><span class="k">Sản phẩm</span><span class="v" id="lkSanPham">—</span></div>
         <div class="info-row"><span class="k">Ngày kích hoạt</span><span class="v" id="lkNgayKH">—</span></div>
@@ -196,8 +282,18 @@
 
 <script>
   // ==== CẤU HÌNH ====
-  // Dán URL Web App Apps Script của bạn vào đây (đuôi /exec)
   const API_URL = "https://script.google.com/macros/s/AKfycbw4AEVeDZ5U76X3qpa6RkhBTddYuJ7UIDIWo7n2QakST1yoal_wVETwPDyHZrRh0FrAsw/exec";
+
+  // ---- Loader màn hình tải trang ----
+  window.addEventListener("load", function(){
+    setTimeout(function(){
+      var loader = document.getElementById("loader");
+      var main = document.getElementById("mainContent");
+      loader.classList.add("hide");
+      main.classList.add("show");
+      setTimeout(function(){ loader.remove(); }, 600);
+    }, 400);
+  });
 
   function esc(str){
     if (str === null || str === undefined || str === '') return "—";
@@ -207,7 +303,7 @@
   async function callApi(payload){
     const res = await fetch(API_URL, {
       method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" }, // tránh CORS preflight với Apps Script
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error("network");
