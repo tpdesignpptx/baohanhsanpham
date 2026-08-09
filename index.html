@@ -7,7 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
   :root{
     --bg-0:#0b0b14;
@@ -106,83 +105,6 @@
   input::placeholder{ color:#5c5c6e; }
   input:focus{ border-color:var(--purple); box-shadow:0 0 0 3px rgba(139,92,246,0.18); }
 
-  /* ===== Ô nhập mã kèm nút quét camera ===== */
-  .code-input-wrap{ position:relative; }
-  .code-input-wrap input{ padding-right:52px; }
-  .scan-btn{
-    position:absolute; right:6px; top:50%; transform:translateY(-50%);
-    width:38px; height:38px; padding:0; margin:0;
-    border-radius:9px; border:1px solid var(--card-border);
-    background:rgba(255,255,255,0.06);
-    display:flex; align-items:center; justify-content:center;
-    cursor:pointer;
-  }
-  .scan-btn svg{ width:18px; height:18px; stroke:var(--text); }
-  .scan-btn:hover{ opacity:1; background:rgba(255,255,255,0.12); }
-
-  /* ===== Modal quét mã bằng camera (nhận diện chữ - OCR) ===== */
-  .scan-modal{
-    position:fixed; inset:0; z-index:1000;
-    background:rgba(5,5,10,0.88);
-    display:none; align-items:center; justify-content:center; padding:20px;
-  }
-  .scan-modal.show{ display:flex; }
-  .scan-modal-inner{
-    width:100%; max-width:400px;
-    background:#111119; border:1px solid var(--card-border);
-    border-radius:18px; overflow:hidden;
-  }
-  .scan-header{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:14px 16px; font-size:14px; font-weight:700; color:var(--text);
-    border-bottom:1px solid var(--card-border);
-  }
-  .scan-header button{
-    all:unset; cursor:pointer; font-size:16px; color:var(--text-dim);
-    width:auto; padding:4px 8px;
-  }
-  .scan-camera-wrap{ position:relative; width:100%; background:#000; aspect-ratio:4/3; overflow:hidden; }
-  .scan-camera-wrap video{ width:100%; height:100%; object-fit:cover; display:block; }
-  .scan-frame{
-    position:absolute; left:10%; right:10%; top:38%; height:24%;
-    border:2px solid var(--cyan); border-radius:10px;
-    box-shadow:0 0 0 999px rgba(0,0,0,0.35);
-    pointer-events:none;
-  }
-  .scan-frame.found{ border-color:var(--ok); box-shadow:0 0 0 999px rgba(0,0,0,0.35), 0 0 16px rgba(52,211,153,0.6); }
-  .scan-hint{ padding:14px 16px 18px; font-size:12px; color:var(--text-dim); text-align:center; line-height:1.5; min-height:34px; }
-
-  /* Chữ trắng hiện giữa khung khi nhận diện xong mã */
-  .scan-recognized{
-    position:absolute; left:8%; right:8%; top:38%; height:24%;
-    display:none; align-items:center; justify-content:center;
-    border-radius:10px; text-align:center; padding:6px 10px;
-    pointer-events:none;
-  }
-  .scan-recognized.show{ display:flex; animation:recognizedPop .3s ease; }
-  .scan-recognized span{
-    color:#fff; font-weight:800; font-size:19px; letter-spacing:0.5px;
-    text-shadow:0 2px 10px rgba(0,0,0,0.9), 0 0 18px rgba(52,211,153,0.6);
-    word-break:break-all;
-  }
-  @keyframes recognizedPop{
-    from{ opacity:0; transform:scale(.92); }
-    to{ opacity:1; transform:scale(1); }
-  }
-
-  /* Vệt quét chạy trong khung xanh, cho biết hệ thống đang thực sự quét liên tục */
-  .scan-line{
-    position:absolute; left:2%; right:2%; height:2px;
-    background:linear-gradient(90deg, transparent, var(--cyan), transparent);
-    top:0; opacity:0.9; pointer-events:none;
-    animation:scanLineMove 1.6s ease-in-out infinite;
-  }
-  @keyframes scanLineMove{
-    0%{ top:6%; }
-    50%{ top:92%; }
-    100%{ top:6%; }
-  }
-
   button{
     width:100%; padding:14px; border:none; border-radius:12px;
     background:linear-gradient(90deg, var(--purple), var(--cyan));
@@ -277,6 +199,89 @@
   }
 
   footer{ text-align:center; color:var(--text-dim); font-size:11.5px; margin-top:22px; }
+
+  /* ===== Nút mở camera trong ô mã bảo hành ===== */
+  .code-input-wrap{ position:relative; }
+  .code-input-wrap input{ padding-right:48px; }
+  .cam-btn{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    width:34px; height:34px; margin:0; padding:0; border-radius:9px;
+    background:linear-gradient(90deg, var(--purple), var(--cyan));
+    display:flex; align-items:center; justify-content:center; cursor:pointer; border:none;
+  }
+  .cam-subhint{ font-size:11.5px; color:var(--text-dim); margin-top:6px; line-height:1.4; }
+  .actCode-filled{ animation:codeFilled .6s ease; border-color:var(--ok) !important; }
+  @keyframes codeFilled{
+    0%{ box-shadow:0 0 0 0 rgba(52,211,153,0.5); }
+    70%{ box-shadow:0 0 0 8px rgba(52,211,153,0); }
+    100%{ box-shadow:0 0 0 0 rgba(52,211,153,0); }
+  }
+
+  /* ===== Modal camera quét mã bảo hành ===== */
+  .cam-modal{
+    position:fixed; inset:0; z-index:3000; background:#000;
+    display:none; flex-direction:column; overflow:hidden;
+  }
+  .cam-modal.show{ display:flex; }
+  .cam-video{
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+    background:#000;
+  }
+  .cam-topbar{
+    position:relative; z-index:2; display:flex; align-items:center; gap:12px;
+    padding:16px 16px 10px; background:linear-gradient(to bottom, rgba(0,0,0,0.55), transparent);
+  }
+  .cam-close{
+    width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.14);
+    border:1px solid rgba(255,255,255,0.25); color:#fff; font-size:18px; line-height:1;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+    margin:0; padding:0;
+  }
+  .cam-topbar-title{ color:#fff; font-size:14px; font-weight:600; }
+
+  .cam-overlay{
+    position:absolute; inset:0; z-index:1;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    pointer-events:none; padding:0 24px;
+  }
+  .cam-frame{
+    position:relative; width:100%; max-width:380px; aspect-ratio:2.8/1;
+    border-radius:16px; border:2px solid rgba(255,255,255,0.65);
+    box-shadow:0 0 0 9999px rgba(0,0,0,0.6);
+    transition:border-color .25s, box-shadow .25s;
+    overflow:hidden;
+  }
+  .cam-frame.matched{ border-color:var(--ok); }
+  .cam-frame.matched::after{ background:rgba(52,211,153,0.12); }
+  .cam-frame::after{
+    content:""; position:absolute; inset:0; pointer-events:none;
+  }
+  .cam-corner{ position:absolute; width:26px; height:26px; }
+  .cam-corner.tl{ top:-2px; left:-2px; border-top:4px solid var(--cyan); border-left:4px solid var(--cyan); border-top-left-radius:14px; }
+  .cam-corner.tr{ top:-2px; right:-2px; border-top:4px solid var(--cyan); border-right:4px solid var(--cyan); border-top-right-radius:14px; }
+  .cam-corner.bl{ bottom:-2px; left:-2px; border-bottom:4px solid var(--cyan); border-left:4px solid var(--cyan); border-bottom-left-radius:14px; }
+  .cam-corner.br{ bottom:-2px; right:-2px; border-bottom:4px solid var(--cyan); border-right:4px solid var(--cyan); border-bottom-right-radius:14px; }
+  .cam-scanline{
+    position:absolute; left:6%; right:6%; height:2px;
+    background:linear-gradient(90deg, transparent, var(--cyan), transparent);
+    box-shadow:0 0 8px 1px rgba(34,211,238,0.7);
+    animation:scanMove 2.2s ease-in-out infinite;
+  }
+  @keyframes scanMove{
+    0%, 100%{ top:12%; }
+    50%{ top:85%; }
+  }
+  .cam-code-preview{
+    margin-top:22px; min-height:34px; text-align:center;
+    font-family:'Be Vietnam Pro', monospace; font-weight:800; font-size:22px;
+    letter-spacing:2px; color:#ffffff;
+    text-shadow:0 0 10px rgba(255,255,255,0.85), 0 0 22px rgba(34,211,238,0.55);
+  }
+  .cam-status{
+    margin-top:10px; color:rgba(255,255,255,0.75); font-size:13px; text-align:center;
+    min-height:18px;
+  }
+  .cam-status.ok{ color:var(--ok); font-weight:700; }
 </style>
 </head>
 <body>
@@ -311,17 +316,25 @@
           <input type="tel" id="actPhone" placeholder="09xxxxxxxx" required>
         </div>
         <div class="field">
+          <label for="actProduct">Sản phẩm đã mua</label>
+          <input type="text" id="actProduct" placeholder="VD: Máy lọc nước X1" required>
+        </div>
+        <div class="field">
           <label for="actCode">Mã bảo hành</label>
           <div class="code-input-wrap">
-            <input type="text" id="actCode" placeholder="Bấm biểu tượng camera để quét mã →" required readonly style="text-transform:uppercase; cursor:pointer;">
-            <button type="button" class="scan-btn" data-target="actCode" aria-label="Quét mã bằng camera">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+            <input type="text" id="actCode" placeholder="VD: BH-2026-00001" required style="text-transform:uppercase">
+            <button type="button" id="openCamBtn" class="cam-btn" title="Quét mã bằng camera" aria-label="Quét mã bằng camera">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b0b14" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"></path>
+                <circle cx="12" cy="13" r="4"></circle>
+              </svg>
             </button>
           </div>
+          <div class="cam-subhint">Bấm biểu tượng camera để tự động quét mã, không cần gõ tay.</div>
         </div>
         <button type="submit" id="actBtn">Kích hoạt ngay</button>
       </form>
-      <div class="hint">Bấm vào ô mã bảo hành để mở camera quét. Mỗi mã chỉ kích hoạt được 1 lần duy nhất.</div>
+      <div class="hint">Mỗi mã bảo hành chỉ kích hoạt được 1 lần duy nhất.</div>
       <div class="error-box" id="actError"></div>
       <div class="result" id="actResult">
         <div class="sheen"></div>
@@ -338,16 +351,11 @@
       <form id="lookupForm" autocomplete="off">
         <div class="field">
           <label for="lkCode">Mã bảo hành</label>
-          <div class="code-input-wrap">
-            <input type="text" id="lkCode" placeholder="Bấm biểu tượng camera để quét mã →" required readonly maxlength="40" style="text-transform:uppercase; cursor:pointer;">
-            <button type="button" class="scan-btn" data-target="lkCode" aria-label="Quét mã bằng camera">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
-            </button>
-          </div>
+          <input type="text" id="lkCode" placeholder="VD: BH-2026-00001" required maxlength="40" style="text-transform:uppercase">
         </div>
         <button type="submit" id="lkBtn">Tra cứu</button>
       </form>
-      <div class="hint">Bấm vào ô mã bảo hành để mở camera quét mã in trên phiếu bảo hành.</div>
+      <div class="hint">Mã bảo hành được in trên phiếu bảo hành hoặc gửi qua Zalo khi bạn mua hàng.</div>
       <div class="error-box" id="lkError"></div>
       <div class="result" id="lkResult">
         <div class="sheen"></div>
@@ -364,24 +372,28 @@
   <footer>© 2026 · Hệ thống bảo hành</footer>
 </div>
 
-<div class="scan-modal" id="scanModal">
-  <div class="scan-modal-inner">
-    <div class="scan-header">
-      <span>Quét mã bảo hành</span>
-      <button type="button" id="scanClose">✕ Đóng</button>
+<!-- ===== MODAL CAMERA QUÉT MÃ BẢO HÀNH ===== -->
+<div class="cam-modal" id="camModal">
+  <video id="camVideo" class="cam-video" autoplay playsinline muted></video>
+  <canvas id="camCanvas" style="display:none;"></canvas>
+  <div class="cam-topbar">
+    <button type="button" class="cam-close" id="camCloseBtn" aria-label="Đóng camera">✕</button>
+    <div class="cam-topbar-title">Đưa mã bảo hành vào khung</div>
+  </div>
+  <div class="cam-overlay">
+    <div class="cam-frame" id="camFrame">
+      <div class="cam-corner tl"></div>
+      <div class="cam-corner tr"></div>
+      <div class="cam-corner bl"></div>
+      <div class="cam-corner br"></div>
+      <div class="cam-scanline" id="camScanline"></div>
     </div>
-    <div class="scan-camera-wrap">
-      <video id="scanVideo" autoplay playsinline muted></video>
-      <div class="scan-frame" id="scanFrame">
-        <div class="scan-line"></div>
-      </div>
-      <div class="scan-recognized" id="scanRecognized"><span id="scanRecognizedText"></span></div>
-    </div>
-    <canvas id="scanCanvas" style="display:none;"></canvas>
-    <div class="scan-hint" id="scanStatus">Đưa dãy mã bảo hành vào khung xanh, giữ yên máy — hệ thống sẽ tự đọc chữ</div>
+    <div class="cam-code-preview" id="camCodePreview">&nbsp;</div>
+    <div class="cam-status" id="camStatus">Đang khởi động camera...</div>
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
 <script>
   // ==== CẤU HÌNH ====
   const API_URL = "https://script.google.com/macros/s/AKfycbw4AEVeDZ5U76X3qpa6RkhBTddYuJ7UIDIWo7n2QakST1yoal_wVETwPDyHZrRh0FrAsw/exec";
@@ -410,233 +422,6 @@
     });
     if (!res.ok) throw new Error("network");
     return res.json();
-  }
-
-  // ---- Tự điền mã bảo hành nếu mở link kèm ?code=... (từ QR trên phiếu bảo hành) ----
-  (function autofillFromQR(){
-    const params = new URLSearchParams(window.location.search);
-    const codeFromUrl = params.get("code");
-    if (codeFromUrl) {
-      const code = codeFromUrl.trim().toUpperCase();
-      document.getElementById("actCode").value = code;
-      document.getElementById("lkCode").value = code;
-      // để mặc định ở tab Kích hoạt, focus sẵn vào ô Họ tên cho khách điền tiếp
-      window.addEventListener("load", function(){
-        setTimeout(function(){
-          const nameInput = document.getElementById("actName");
-          if (nameInput) nameInput.focus();
-        }, 900);
-      });
-    }
-  })();
-
-  // ---- Quét mã bằng camera: tự động nhận diện liên tục, không cần bấm chụp ----
-  // Ưu tiên đọc MÃ QR in sẵn trên phiếu (nhanh, chính xác, không phụ thuộc ánh sáng/góc như đọc chữ).
-  // Nếu không thấy QR trong khung hình, mới thử đọc dòng chữ "Mã bảo hành" bằng OCR (dự phòng, chậm hơn).
-  let scanStream = null;
-  let scanTargetInput = null;
-  let ocrWorker = null;
-  let scanLoopActive = false;
-  let scanBusy = false;
-  let scanAttemptCount = 0;
-  const scanModal = document.getElementById("scanModal");
-  const scanVideo = document.getElementById("scanVideo");
-  const scanCanvas = document.getElementById("scanCanvas");
-  const scanStatus = document.getElementById("scanStatus");
-  const scanFrame = document.getElementById("scanFrame");
-  const scanRecognized = document.getElementById("scanRecognized");
-  const scanRecognizedText = document.getElementById("scanRecognizedText");
-  const DEFAULT_HINT = "Đưa dãy mã bảo hành vào khung xanh, giữ yên máy — hệ thống sẽ tự đọc chữ";
-  const SCAN_INTERVAL_MS = 700;
-
-  async function getOcrWorker(){
-    if (!ocrWorker) {
-      ocrWorker = await Tesseract.createWorker("eng");
-      await ocrWorker.setParameters({
-        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-",
-        tessedit_pageseg_mode: "7" // đọc như 1 dòng chữ đơn, chính xác hơn cho mã ngắn
-      });
-    }
-    return ocrWorker;
-  }
-
-  document.querySelectorAll(".scan-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      scanTargetInput = document.getElementById(btn.dataset.target);
-      openScanner();
-    });
-  });
-
-  // Bấm thẳng vào ô input cũng mở camera, không bắt buộc nhắm đúng icon
-  ["actCode", "lkCode"].forEach(id => {
-    const inp = document.getElementById(id);
-    if (inp) {
-      inp.addEventListener("click", () => {
-        scanTargetInput = inp;
-        openScanner();
-      });
-    }
-  });
-
-  document.getElementById("scanClose").addEventListener("click", closeScanner);
-
-  async function openScanner(){
-    scanModal.classList.add("show");
-    resetToCamera();
-    try {
-      scanStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1440 } }
-      });
-      scanVideo.srcObject = scanStream;
-      await getOcrWorker();
-      startAutoScanLoop();
-    } catch (err) {
-      alert("Không mở được camera. Hãy cho phép quyền truy cập camera trong trình duyệt rồi thử lại.");
-      closeScanner();
-    }
-  }
-
-  function resetToCamera(){
-    scanFrame.classList.remove("found");
-    scanRecognized.classList.remove("show");
-    scanRecognizedText.textContent = "";
-    scanStatus.textContent = DEFAULT_HINT;
-    scanAttemptCount = 0;
-  }
-
-  function closeScanner(){
-    scanLoopActive = false;
-    scanModal.classList.remove("show");
-    if (scanStream) {
-      scanStream.getTracks().forEach(t => t.stop());
-      scanStream = null;
-    }
-  }
-
-  function startAutoScanLoop(){
-    scanLoopActive = true;
-    scanLoopTick();
-  }
-
-  // Tách mã bảo hành dạng BH-XXXXXX hoặc BH-2026-00001 từ chữ đọc được
-  function extractCodeFromText(text){
-    if (!text) return null;
-    const upper = text.trim().toUpperCase();
-    const match = upper.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
-    return match ? match[0] : null;
-  }
-
-  // Tính toán vùng ảnh (theo pixel gốc của camera) tương ứng với khung xanh hiển thị trên màn hình.
-  // Bắt buộc phải cắt đúng vùng này vì video hiển thị bằng object-fit:cover nên khung xanh trên màn
-  // hình KHÔNG cùng tỉ lệ pixel với ảnh gốc video — cắt sai vùng là nguyên nhân chính khiến máy
-  // luôn đọc nhầm chữ (đọc lẫn cả tấm phiếu nhiều dòng thay vì chỉ đọc đúng 1 dòng mã).
-  function getFrameCropRect(){
-    const rect = scanVideo.getBoundingClientRect();
-    const containerW = rect.width;
-    const containerH = rect.height;
-    const vw = scanVideo.videoWidth;
-    const vh = scanVideo.videoHeight;
-    if (!containerW || !containerH || !vw || !vh) return null;
-
-    const videoAspect = vw / vh;
-    const containerAspect = containerW / containerH;
-    let scale, xOffset = 0, yOffset = 0;
-
-    if (videoAspect > containerAspect) {
-      // video "rộng" hơn khung hiển thị -> khớp theo chiều cao, cắt bớt 2 bên trái/phải
-      scale = containerH / vh;
-      const displayedW = vw * scale;
-      xOffset = (containerW - displayedW) / 2;
-    } else {
-      // video "cao" hơn khung hiển thị -> khớp theo chiều rộng, cắt bớt trên/dưới
-      scale = containerW / vw;
-      const displayedH = vh * scale;
-      yOffset = (containerH - displayedH) / 2;
-    }
-
-    // Khung xanh (.scan-frame) theo CSS: left 10%, top 38%, width 80% (right 10%), height 24%.
-    // Nới rộng thêm biên độ để không quá khắt khe khi khách canh camera lệch nhẹ.
-    const padX = containerW * 0.03;
-    const padY = containerH * 0.05;
-    const boxLeftPx = containerW * 0.10 - padX;
-    const boxTopPx = containerH * 0.38 - padY;
-    const boxWPx = containerW * 0.80 + padX * 2;
-    const boxHPx = containerH * 0.24 + padY * 2;
-
-    let srcX = (boxLeftPx - xOffset) / scale;
-    let srcY = (boxTopPx - yOffset) / scale;
-    let srcW = boxWPx / scale;
-    let srcH = boxHPx / scale;
-
-    // giới hạn trong phạm vi ảnh gốc
-    srcX = Math.max(0, srcX);
-    srcY = Math.max(0, srcY);
-    srcW = Math.min(srcW, vw - srcX);
-    srcH = Math.min(srcH, vh - srcY);
-
-    return { srcX, srcY, srcW, srcH };
-  }
-
-  async function scanLoopTick(){
-    if (!scanLoopActive) return;
-
-    if (!scanBusy && scanVideo.videoWidth) {
-      scanBusy = true;
-      try {
-        const crop = getFrameCropRect();
-        if (crop && crop.srcW > 0 && crop.srcH > 0) {
-          // phóng to vùng cắt lên để chữ rõ nét hơn cho OCR
-          const UPSCALE = 2.2;
-          const outW = Math.round(crop.srcW * UPSCALE);
-          const outH = Math.round(crop.srcH * UPSCALE);
-          scanCanvas.width = outW;
-          scanCanvas.height = outH;
-          const ctx = scanCanvas.getContext("2d");
-          ctx.drawImage(
-            scanVideo,
-            crop.srcX, crop.srcY, crop.srcW, crop.srcH,
-            0, 0, outW, outH
-          );
-
-          const worker = await getOcrWorker();
-          const { data } = await worker.recognize(scanCanvas);
-          const code = extractCodeFromText(data.text || "");
-
-          if (code) {
-            scanBusy = false;
-            handleRecognized(code);
-            return; // dừng vòng lặp, đã nhận diện xong
-          }
-
-          scanAttemptCount++;
-          if (scanAttemptCount === 6) {
-            scanStatus.textContent = "Chưa nhận diện được — đưa camera gần hơn, đủ sáng và giữ mã nằm ngang trong khung.";
-          } else if (scanAttemptCount === 14) {
-            scanStatus.textContent = "Vẫn chưa đọc được — thử xoay phiếu cho mã bảo hành thẳng, tránh chói sáng hoặc mờ nét.";
-          }
-        }
-      } catch (err) {
-        // bỏ qua lỗi của 1 lượt đọc, thử lại ở lượt kế tiếp
-      }
-      scanBusy = false;
-    }
-
-    if (scanLoopActive) {
-      setTimeout(scanLoopTick, SCAN_INTERVAL_MS);
-    }
-  }
-
-  function handleRecognized(code){
-    scanLoopActive = false;
-    scanFrame.classList.add("found");
-    scanRecognizedText.textContent = "✓ " + code;
-    scanRecognized.classList.add("show");
-    scanStatus.textContent = "Đã nhận diện xong, đang điền mã...";
-
-    setTimeout(() => {
-      if (scanTargetInput) scanTargetInput.value = code;
-      closeScanner();
-    }, 900);
   }
 
   // ---- Tab switching ----
@@ -668,6 +453,7 @@
         action: "activate",
         name: document.getElementById("actName").value.trim(),
         phone: document.getElementById("actPhone").value.trim(),
+        product: document.getElementById("actProduct").value.trim(),
         code: document.getElementById("actCode").value.trim()
       });
 
@@ -734,6 +520,182 @@
       lkBtn.textContent = "Tra cứu";
     }
   });
+
+  // ==================================================================
+  // QUÉT CAMERA – TỰ ĐỘNG NHẬN DIỆN MÃ BẢO HÀNH (KHÔNG CẦN GÕ TAY)
+  // ==================================================================
+  (function(){
+    const openCamBtn   = document.getElementById("openCamBtn");
+    const camModal      = document.getElementById("camModal");
+    const camCloseBtn   = document.getElementById("camCloseBtn");
+    const camVideo       = document.getElementById("camVideo");
+    const camCanvas      = document.getElementById("camCanvas");
+    const camFrame        = document.getElementById("camFrame");
+    const camCodePreview   = document.getElementById("camCodePreview");
+    const camStatus         = document.getElementById("camStatus");
+    const actCodeInput       = document.getElementById("actCode");
+
+    // Định dạng mã bảo hành cần nhận diện, ví dụ: BH-KLULS2, BH-2026-00001
+    const CODE_REGEX = /BH-[A-Z0-9]{3,14}/;
+
+    let mediaStream = null;
+    let ocrWorker = null;
+    let workerReady = false;
+    let scanning = false;
+    let scanTimer = null;
+    let lastCandidate = "";
+    let stableHits = 0;
+    const REQUIRED_STABLE_HITS = 2; // phải nhận cùng 1 mã liên tiếp mới xác nhận
+
+    async function ensureWorker(){
+      if (workerReady) return;
+      camStatus.textContent = "Đang tải bộ nhận diện ký tự...";
+      ocrWorker = await Tesseract.createWorker("eng", 1, { logger: function(){} });
+      await ocrWorker.setParameters({
+        tessedit_char_whitelist: "BH-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        tessedit_pageseg_mode: "7" // xem vùng quét như một dòng chữ duy nhất
+      });
+      workerReady = true;
+    }
+
+    async function openCamera(){
+      camModal.classList.add("show");
+      camFrame.classList.remove("matched");
+      camCodePreview.innerHTML = "&nbsp;";
+      camStatus.className = "cam-status";
+      camStatus.textContent = "Đang khởi động camera...";
+      lastCandidate = "";
+      stableHits = 0;
+
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
+        camVideo.srcObject = mediaStream;
+        await camVideo.play();
+      } catch (err) {
+        camStatus.textContent = "Không thể mở camera. Vui lòng cho phép quyền truy cập camera hoặc nhập mã thủ công.";
+        return;
+      }
+
+      try {
+        await ensureWorker();
+      } catch (err) {
+        camStatus.textContent = "Không tải được bộ nhận diện. Vui lòng nhập mã thủ công.";
+        return;
+      }
+
+      camStatus.textContent = "Đang quét, giữ mã trong khung...";
+      scanning = true;
+      scheduleScan();
+    }
+
+    function scheduleScan(){
+      if (!scanning) return;
+      scanTimer = setTimeout(runScan, 650);
+    }
+
+    async function runScan(){
+      if (!scanning) return;
+      try {
+        const vRect = camVideo.getBoundingClientRect();
+        const fRect = camFrame.getBoundingClientRect();
+        if (camVideo.videoWidth && vRect.width && vRect.height) {
+          const scaleX = camVideo.videoWidth / vRect.width;
+          const scaleY = camVideo.videoHeight / vRect.height;
+          const sx = Math.max(0, (fRect.left - vRect.left) * scaleX);
+          const sy = Math.max(0, (fRect.top - vRect.top) * scaleY);
+          const sw = fRect.width * scaleX;
+          const sh = fRect.height * scaleY;
+
+          camCanvas.width = sw;
+          camCanvas.height = sh;
+          const ctx = camCanvas.getContext("2d");
+          ctx.drawImage(camVideo, sx, sy, sw, sh, 0, 0, sw, sh);
+
+          const result = await ocrWorker.recognize(camCanvas);
+          const raw = (result && result.data && result.data.text ? result.data.text : "")
+            .toUpperCase().replace(/[^A-Z0-9\-\s]/g, "").trim();
+
+          const match = raw.match(CODE_REGEX);
+
+          if (match) {
+            const candidate = match[0];
+            camCodePreview.textContent = candidate;
+            if (candidate === lastCandidate) {
+              stableHits++;
+            } else {
+              lastCandidate = candidate;
+              stableHits = 1;
+            }
+            camStatus.textContent = "Đã thấy mã: " + candidate + " — đang xác nhận...";
+
+            if (stableHits >= REQUIRED_STABLE_HITS) {
+              confirmCode(candidate);
+              return; // dừng vòng quét
+            }
+          } else if (raw) {
+            camCodePreview.textContent = raw;
+            camStatus.textContent = "Đang quét, giữ mã trong khung...";
+          }
+        }
+      } catch (err) {
+        // bỏ qua lỗi của 1 khung hình, thử lại ở lần quét kế tiếp
+      }
+      scheduleScan();
+    }
+
+    function confirmCode(code){
+      scanning = false;
+      if (scanTimer) { clearTimeout(scanTimer); scanTimer = null; }
+
+      camFrame.classList.add("matched");
+      camCodePreview.textContent = code;
+      camStatus.className = "cam-status ok";
+      camStatus.textContent = "✓ Đã nhận diện mã bảo hành";
+
+      if (navigator.vibrate) { try { navigator.vibrate(120); } catch(e){} }
+
+      // Tự động điền mã vào ô nhập, người dùng không cần gõ tay
+      actCodeInput.value = code;
+      actCodeInput.classList.remove("actCode-filled");
+      void actCodeInput.offsetWidth; // reset animation
+      actCodeInput.classList.add("actCode-filled");
+
+      setTimeout(closeCamera, 850);
+    }
+
+    function closeCamera(){
+      scanning = false;
+      if (scanTimer) { clearTimeout(scanTimer); scanTimer = null; }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(function(t){ t.stop(); });
+        mediaStream = null;
+      }
+      camVideo.srcObject = null;
+      camModal.classList.remove("show");
+
+      if (ocrWorker) {
+        ocrWorker.terminate();
+        ocrWorker = null;
+        workerReady = false;
+      }
+
+      // Nếu đã quét được mã, chuyển focus sang trường tiếp theo còn trống
+      if (actCodeInput.value) {
+        const actName = document.getElementById("actName");
+        const actPhone = document.getElementById("actPhone");
+        const actProduct = document.getElementById("actProduct");
+        if (!actName.value) actName.focus();
+        else if (!actPhone.value) actPhone.focus();
+        else if (!actProduct.value) actProduct.focus();
+      }
+    }
+
+    if (openCamBtn) openCamBtn.addEventListener("click", openCamera);
+    if (camCloseBtn) camCloseBtn.addEventListener("click", closeCamera);
+  })();
 </script>
 
 </body>
