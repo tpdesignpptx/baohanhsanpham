@@ -149,18 +149,26 @@
     box-shadow:0 0 0 999px rgba(0,0,0,0.35);
     pointer-events:none;
   }
-  .scan-hint{ padding:12px 16px 4px; font-size:12px; color:var(--text-dim); text-align:center; line-height:1.5; min-height:34px; }
-  .scan-capture-btn{ margin:10px 16px 16px; width:calc(100% - 32px); }
-  .scan-debug{ padding:0 16px 16px; }
-  .scan-debug-title{ font-size:11.5px; color:var(--text-dim); margin:10px 0 6px; font-weight:600; }
-  .scan-debug img{ width:100%; border-radius:8px; border:1px solid var(--card-border); display:block; }
-  .scan-debug-text{
-    font-family:monospace; font-size:14px; font-weight:700; color:var(--cyan);
-    background:rgba(255,255,255,0.04); border:1px solid var(--card-border);
-    border-radius:8px; padding:10px 12px; word-break:break-all; min-height:20px;
+  .scan-hint{ padding:14px 16px 18px; font-size:12px; color:var(--text-dim); text-align:center; line-height:1.5; min-height:34px; }
+
+  /* Chữ trắng hiện giữa khung khi nhận diện xong mã */
+  .scan-recognized{
+    position:absolute; left:8%; right:8%; top:38%; height:24%;
+    display:none; align-items:center; justify-content:center;
+    border-radius:10px; text-align:center; padding:6px 10px;
+    pointer-events:none;
   }
-  #scanUseRaw{ margin-top:10px; background:linear-gradient(90deg, var(--cyan), var(--purple)); }
-  .scan-retry-btn{ margin-top:8px; background:rgba(255,255,255,0.08); color:var(--text); }
+  .scan-recognized.show{ display:flex; animation:recognizedPop .3s ease; }
+  .scan-recognized span{
+    color:#fff; font-weight:800; font-size:19px; letter-spacing:0.5px;
+    text-shadow:0 2px 10px rgba(0,0,0,0.9), 0 0 18px rgba(52,211,153,0.6);
+    word-break:break-all;
+  }
+  @keyframes recognizedPop{
+    from{ opacity:0; transform:scale(.92); }
+    to{ opacity:1; transform:scale(1); }
+  }
+  .scan-frame.found{ border-color:var(--ok); box-shadow:0 0 0 999px rgba(0,0,0,0.35), 0 0 16px rgba(52,211,153,0.6); }
 
   button{
     width:100%; padding:14px; border:none; border-radius:12px;
@@ -351,20 +359,11 @@
     </div>
     <div class="scan-camera-wrap">
       <video id="scanVideo" autoplay playsinline muted></video>
-      <div class="scan-frame"></div>
+      <div class="scan-frame" id="scanFrame"></div>
+      <div class="scan-recognized" id="scanRecognized"><span id="scanRecognizedText"></span></div>
     </div>
     <canvas id="scanCanvas" style="display:none;"></canvas>
-    <div class="scan-hint" id="scanStatus">Đưa dãy mã bảo hành vào khung xanh, giữ yên rồi bấm Chụp mã</div>
-    <button type="button" id="scanCaptureBtn" class="scan-capture-btn">📸 Chụp mã</button>
-
-    <div class="scan-debug" id="scanDebug" style="display:none;">
-      <div class="scan-debug-title">Ảnh vừa chụp:</div>
-      <img id="scanDebugImg" alt="Ảnh đã chụp">
-      <div class="scan-debug-title">Chữ máy đọc được:</div>
-      <div class="scan-debug-text" id="scanDebugText">—</div>
-      <button type="button" id="scanUseRaw" style="display:none;">Dùng chữ này</button>
-      <button type="button" id="scanRetry" class="scan-retry-btn">Chụp lại</button>
-    </div>
+    <div class="scan-hint" id="scanStatus">Đưa dãy mã bảo hành vào khung xanh, giữ yên máy — hệ thống sẽ tự nhận diện</div>
   </div>
 </div>
 
@@ -416,16 +415,21 @@
     }
   })();
 
-  // ---- Quét mã bằng camera (chụp ảnh + nhận diện chữ - OCR) ----
+  // ---- Quét mã bằng camera: tự động nhận diện liên tục, không cần bấm chụp ----
   let scanStream = null;
   let scanTargetInput = null;
   let ocrWorker = null;
+  let scanLoopActive = false;
+  let scanBusy = false;
   const scanModal = document.getElementById("scanModal");
   const scanVideo = document.getElementById("scanVideo");
   const scanCanvas = document.getElementById("scanCanvas");
   const scanStatus = document.getElementById("scanStatus");
-  const scanCaptureBtn = document.getElementById("scanCaptureBtn");
-  const DEFAULT_HINT = "Đưa dãy mã bảo hành vào khung xanh, đủ sáng, giữ yên rồi bấm Chụp mã";
+  const scanFrame = document.getElementById("scanFrame");
+  const scanRecognized = document.getElementById("scanRecognized");
+  const scanRecognizedText = document.getElementById("scanRecognizedText");
+  const DEFAULT_HINT = "Đưa dãy mã bảo hành vào khung xanh, giữ yên máy — hệ thống sẽ tự nhận diện";
+  const SCAN_INTERVAL_MS = 700;
 
   async function getOcrWorker(){
     if (!ocrWorker) {
@@ -437,13 +441,6 @@
     }
     return ocrWorker;
   }
-
-  const scanDebug = document.getElementById("scanDebug");
-  const scanDebugImg = document.getElementById("scanDebugImg");
-  const scanDebugText = document.getElementById("scanDebugText");
-  const scanUseRaw = document.getElementById("scanUseRaw");
-  const scanRetry = document.getElementById("scanRetry");
-  let lastRawGuess = "";
 
   document.querySelectorAll(".scan-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -464,14 +461,6 @@
   });
 
   document.getElementById("scanClose").addEventListener("click", closeScanner);
-  scanCaptureBtn.addEventListener("click", captureAndRecognize);
-  scanRetry.addEventListener("click", resetToCamera);
-  scanUseRaw.addEventListener("click", () => {
-    if (scanTargetInput && lastRawGuess) {
-      scanTargetInput.value = lastRawGuess.replace(/\s+/g, "");
-    }
-    closeScanner();
-  });
 
   async function openScanner(){
     scanModal.classList.add("show");
@@ -481,7 +470,8 @@
         video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1440 } }
       });
       scanVideo.srcObject = scanStream;
-      getOcrWorker(); // tải sẵn engine OCR trong lúc khách canh camera, đỡ mất thời gian chờ lúc chụp
+      await getOcrWorker();
+      startAutoScanLoop();
     } catch (err) {
       alert("Không mở được camera. Hãy cho phép quyền truy cập camera trong trình duyệt rồi thử lại.");
       closeScanner();
@@ -489,17 +479,14 @@
   }
 
   function resetToCamera(){
-    scanDebug.style.display = "none";
-    scanUseRaw.style.display = "none";
-    scanVideo.style.display = "block";
-    document.querySelector(".scan-frame").style.display = "block";
-    scanCaptureBtn.style.display = "block";
+    scanFrame.classList.remove("found");
+    scanRecognized.classList.remove("show");
+    scanRecognizedText.textContent = "";
     scanStatus.textContent = DEFAULT_HINT;
-    scanCaptureBtn.disabled = false;
-    scanCaptureBtn.textContent = "📸 Chụp mã";
   }
 
   function closeScanner(){
+    scanLoopActive = false;
     scanModal.classList.remove("show");
     if (scanStream) {
       scanStream.getTracks().forEach(t => t.stop());
@@ -507,55 +494,60 @@
     }
   }
 
-  async function captureAndRecognize(){
-    if (!scanStream) return;
-    scanCaptureBtn.disabled = true;
-    scanStatus.innerHTML = '<span class="spinner"></span>Đang nhận diện chữ, vui lòng đợi...';
+  function startAutoScanLoop(){
+    scanLoopActive = true;
+    scanLoopTick();
+  }
 
-    // Chụp TOÀN BỘ khung hình camera, giữ nguyên ảnh màu gốc (không xử lý đen-trắng)
-    const vw = scanVideo.videoWidth;
-    const vh = scanVideo.videoHeight;
-    scanCanvas.width = vw;
-    scanCanvas.height = vh;
-    const ctx = scanCanvas.getContext("2d");
-    ctx.drawImage(scanVideo, 0, 0, vw, vh);
+  async function scanLoopTick(){
+    if (!scanLoopActive) return;
 
-    // Hiện ảnh vừa chụp để kiểm tra
-    scanDebugImg.src = scanCanvas.toDataURL("image/png");
+    if (!scanBusy && scanVideo.videoWidth) {
+      scanBusy = true;
+      try {
+        const vw = scanVideo.videoWidth;
+        const vh = scanVideo.videoHeight;
+        scanCanvas.width = vw;
+        scanCanvas.height = vh;
+        const ctx = scanCanvas.getContext("2d");
+        ctx.drawImage(scanVideo, 0, 0, vw, vh);
 
-    try {
-      const worker = await getOcrWorker();
-      const { data } = await worker.recognize(scanCanvas);
-      const raw = (data.text || "").trim();
-      const rawUpper = raw.toUpperCase();
-      lastRawGuess = raw;
+        const worker = await getOcrWorker();
+        const { data } = await worker.recognize(scanCanvas);
+        const raw = (data.text || "").trim();
+        const rawUpper = raw.toUpperCase();
 
-      // hiện khu vực debug: ảnh + chữ đọc được
-      scanVideo.style.display = "none";
-      document.querySelector(".scan-frame").style.display = "none";
-      scanCaptureBtn.style.display = "none";
-      scanDebug.style.display = "block";
-      scanDebugText.textContent = raw ? raw.replace(/\n+/g, " / ") : "(không đọc được chữ nào)";
+        // Mã bảo hành dạng BH-XXXXXX hoặc BH-2026-00001: tìm cụm chữ+số có dấu gạch ngang
+        const match = rawUpper.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
 
-      // Mã bảo hành dạng BH-XXXXXX hoặc BH-2026-00001: tìm cụm chữ+số có dấu gạch ngang
-      const match = rawUpper.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
-
-      if (match) {
-        const code = match[0].replace(/[^A-Z0-9-]/g, "");
-        scanStatus.textContent = "Đã nhận diện được mã: " + code;
-        if (scanTargetInput) scanTargetInput.value = code;
-        setTimeout(closeScanner, 900);
-      } else if (raw) {
-        scanStatus.textContent = "Không khớp đúng định dạng mã. Xem chữ máy đọc được bên dưới — nếu đúng, bấm \"Dùng chữ này\", hoặc bấm Chụp lại.";
-        scanUseRaw.style.display = "block";
-      } else {
-        scanStatus.textContent = "Không đọc được chữ nào trong ảnh. Bấm Chụp lại và đưa camera gần, rõ nét hơn.";
+        if (match) {
+          const code = match[0].replace(/[^A-Z0-9-]/g, "");
+          scanBusy = false;
+          handleRecognized(code);
+          return; // dừng vòng lặp, đã nhận diện xong
+        }
+      } catch (err) {
+        // bỏ qua lỗi của 1 lượt đọc, thử lại ở lượt kế tiếp
       }
-    } catch (err) {
-      scanStatus.textContent = "Có lỗi khi nhận diện. Vui lòng thử lại.";
-      scanCaptureBtn.disabled = false;
-      scanCaptureBtn.style.display = "block";
+      scanBusy = false;
     }
+
+    if (scanLoopActive) {
+      setTimeout(scanLoopTick, SCAN_INTERVAL_MS);
+    }
+  }
+
+  function handleRecognized(code){
+    scanLoopActive = false;
+    scanFrame.classList.add("found");
+    scanRecognizedText.textContent = "✓ " + code;
+    scanRecognized.classList.add("show");
+    scanStatus.textContent = "Đã nhận diện xong, đang điền mã...";
+
+    setTimeout(() => {
+      if (scanTargetInput) scanTargetInput.value = code;
+      closeScanner();
+    }, 900);
   }
 
   // ---- Tab switching ----
