@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   :root{
     --bg-0:#0b0b14;
@@ -104,6 +105,44 @@
   }
   input::placeholder{ color:#5c5c6e; }
   input:focus{ border-color:var(--purple); box-shadow:0 0 0 3px rgba(139,92,246,0.18); }
+
+  /* ===== Ô nhập mã kèm nút quét camera ===== */
+  .code-input-wrap{ position:relative; }
+  .code-input-wrap input{ padding-right:52px; }
+  .scan-btn{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    width:38px; height:38px; padding:0; margin:0;
+    border-radius:9px; border:1px solid var(--card-border);
+    background:rgba(255,255,255,0.06);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+  .scan-btn svg{ width:18px; height:18px; stroke:var(--text); }
+  .scan-btn:hover{ opacity:1; background:rgba(255,255,255,0.12); }
+
+  /* ===== Modal quét mã bằng camera ===== */
+  .scan-modal{
+    position:fixed; inset:0; z-index:1000;
+    background:rgba(5,5,10,0.88);
+    display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  .scan-modal.show{ display:flex; }
+  .scan-modal-inner{
+    width:100%; max-width:400px;
+    background:#111119; border:1px solid var(--card-border);
+    border-radius:18px; overflow:hidden;
+  }
+  .scan-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 16px; font-size:14px; font-weight:700; color:var(--text);
+    border-bottom:1px solid var(--card-border);
+  }
+  .scan-header button{
+    all:unset; cursor:pointer; font-size:16px; color:var(--text-dim);
+    width:auto; padding:4px 8px;
+  }
+  #reader{ width:100%; background:#000; }
+  .scan-hint{ padding:12px 16px 16px; font-size:12px; color:var(--text-dim); text-align:center; line-height:1.5; }
 
   button{
     width:100%; padding:14px; border:none; border-radius:12px;
@@ -234,7 +273,12 @@
         </div>
         <div class="field">
           <label for="actCode">Mã bảo hành</label>
-          <input type="text" id="actCode" placeholder="VD: BH-2026-00001" required style="text-transform:uppercase">
+          <div class="code-input-wrap">
+            <input type="text" id="actCode" placeholder="VD: BH-2026-00001" required style="text-transform:uppercase">
+            <button type="button" class="scan-btn" data-target="actCode" aria-label="Quét mã bằng camera">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+            </button>
+          </div>
         </div>
         <button type="submit" id="actBtn">Kích hoạt ngay</button>
       </form>
@@ -255,7 +299,12 @@
       <form id="lookupForm" autocomplete="off">
         <div class="field">
           <label for="lkCode">Mã bảo hành</label>
-          <input type="text" id="lkCode" placeholder="VD: BH-2026-00001" required maxlength="40" style="text-transform:uppercase">
+          <div class="code-input-wrap">
+            <input type="text" id="lkCode" placeholder="VD: BH-2026-00001" required maxlength="40" style="text-transform:uppercase">
+            <button type="button" class="scan-btn" data-target="lkCode" aria-label="Quét mã bằng camera">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+            </button>
+          </div>
         </div>
         <button type="submit" id="lkBtn">Tra cứu</button>
       </form>
@@ -274,6 +323,17 @@
   </div>
 
   <footer>© 2026 · Hệ thống bảo hành</footer>
+</div>
+
+<div class="scan-modal" id="scanModal">
+  <div class="scan-modal-inner">
+    <div class="scan-header">
+      <span>Quét mã bảo hành</span>
+      <button type="button" id="scanClose">✕ Đóng</button>
+    </div>
+    <div id="reader"></div>
+    <div class="scan-hint">Đưa camera hướng thẳng vào mã QR hoặc mã vạch in trên phiếu bảo hành</div>
+  </div>
 </div>
 
 <script>
@@ -304,6 +364,47 @@
     });
     if (!res.ok) throw new Error("network");
     return res.json();
+  }
+
+  // ---- Quét mã bằng camera ----
+  let html5QrCode = null;
+  let scanTargetInput = null;
+  const scanModal = document.getElementById("scanModal");
+
+  document.querySelectorAll(".scan-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      scanTargetInput = document.getElementById(btn.dataset.target);
+      openScanner();
+    });
+  });
+
+  document.getElementById("scanClose").addEventListener("click", closeScanner);
+
+  function openScanner(){
+    scanModal.classList.add("show");
+    html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 230, height: 230 } },
+      (decodedText) => {
+        if (scanTargetInput) {
+          scanTargetInput.value = decodedText.trim().toUpperCase();
+        }
+        closeScanner();
+      },
+      () => { /* bỏ qua lỗi từng khung hình khi chưa thấy mã */ }
+    ).catch(err => {
+      alert("Không mở được camera. Hãy cho phép truy cập camera trong trình duyệt và thử lại.");
+      closeScanner();
+    });
+  }
+
+  function closeScanner(){
+    scanModal.classList.remove("show");
+    if (html5QrCode) {
+      html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
+      html5QrCode = null;
+    }
   }
 
   // ---- Tab switching ----
