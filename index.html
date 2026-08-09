@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
   :root{
     --bg-0:#0b0b14;
@@ -120,7 +120,7 @@
   .scan-btn svg{ width:18px; height:18px; stroke:var(--text); }
   .scan-btn:hover{ opacity:1; background:rgba(255,255,255,0.12); }
 
-  /* ===== Modal quét mã bằng camera ===== */
+  /* ===== Modal quét mã bằng camera (nhận diện chữ - OCR) ===== */
   .scan-modal{
     position:fixed; inset:0; z-index:1000;
     background:rgba(5,5,10,0.88);
@@ -141,8 +141,16 @@
     all:unset; cursor:pointer; font-size:16px; color:var(--text-dim);
     width:auto; padding:4px 8px;
   }
-  #reader{ width:100%; background:#000; }
-  .scan-hint{ padding:12px 16px 16px; font-size:12px; color:var(--text-dim); text-align:center; line-height:1.5; }
+  .scan-camera-wrap{ position:relative; width:100%; background:#000; aspect-ratio:4/3; overflow:hidden; }
+  .scan-camera-wrap video{ width:100%; height:100%; object-fit:cover; display:block; }
+  .scan-frame{
+    position:absolute; left:10%; right:10%; top:38%; height:24%;
+    border:2px solid var(--cyan); border-radius:10px;
+    box-shadow:0 0 0 999px rgba(0,0,0,0.35);
+    pointer-events:none;
+  }
+  .scan-hint{ padding:12px 16px 4px; font-size:12px; color:var(--text-dim); text-align:center; line-height:1.5; min-height:34px; }
+  .scan-capture-btn{ margin:10px 16px 16px; width:calc(100% - 32px); }
 
   button{
     width:100%; padding:14px; border:none; border-radius:12px;
@@ -331,8 +339,13 @@
       <span>Quét mã bảo hành</span>
       <button type="button" id="scanClose">✕ Đóng</button>
     </div>
-    <div id="reader"></div>
-    <div class="scan-hint">Đưa camera hướng thẳng vào mã QR hoặc mã vạch in trên phiếu bảo hành</div>
+    <div class="scan-camera-wrap">
+      <video id="scanVideo" autoplay playsinline muted></video>
+      <div class="scan-frame"></div>
+    </div>
+    <canvas id="scanCanvas" style="display:none;"></canvas>
+    <div class="scan-hint" id="scanStatus">Đưa dãy mã bảo hành vào khung xanh, giữ yên rồi bấm Chụp mã</div>
+    <button type="button" id="scanCaptureBtn" class="scan-capture-btn">📸 Chụp mã</button>
   </div>
 </div>
 
@@ -366,10 +379,33 @@
     return res.json();
   }
 
-  // ---- Quét mã bằng camera ----
-  let html5QrCode = null;
+  // ---- Tự điền mã bảo hành nếu mở link kèm ?code=... (từ QR trên phiếu bảo hành) ----
+  (function autofillFromQR(){
+    const params = new URLSearchParams(window.location.search);
+    const codeFromUrl = params.get("code");
+    if (codeFromUrl) {
+      const code = codeFromUrl.trim().toUpperCase();
+      document.getElementById("actCode").value = code;
+      document.getElementById("lkCode").value = code;
+      // để mặc định ở tab Kích hoạt, focus sẵn vào ô Họ tên cho khách điền tiếp
+      window.addEventListener("load", function(){
+        setTimeout(function(){
+          const nameInput = document.getElementById("actName");
+          if (nameInput) nameInput.focus();
+        }, 900);
+      });
+    }
+  })();
+
+  // ---- Quét mã bằng camera (chụp ảnh + nhận diện chữ - OCR) ----
+  let scanStream = null;
   let scanTargetInput = null;
   const scanModal = document.getElementById("scanModal");
+  const scanVideo = document.getElementById("scanVideo");
+  const scanCanvas = document.getElementById("scanCanvas");
+  const scanStatus = document.getElementById("scanStatus");
+  const scanCaptureBtn = document.getElementById("scanCaptureBtn");
+  const DEFAULT_HINT = "Đưa dãy mã bảo hành vào khung xanh, giữ yên rồi bấm Chụp mã";
 
   document.querySelectorAll(".scan-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -379,31 +415,60 @@
   });
 
   document.getElementById("scanClose").addEventListener("click", closeScanner);
+  scanCaptureBtn.addEventListener("click", captureAndRecognize);
 
-  function openScanner(){
+  async function openScanner(){
     scanModal.classList.add("show");
-    html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 230, height: 230 } },
-      (decodedText) => {
-        if (scanTargetInput) {
-          scanTargetInput.value = decodedText.trim().toUpperCase();
-        }
-        closeScanner();
-      },
-      () => { /* bỏ qua lỗi từng khung hình khi chưa thấy mã */ }
-    ).catch(err => {
-      alert("Không mở được camera. Hãy cho phép truy cập camera trong trình duyệt và thử lại.");
+    scanStatus.textContent = DEFAULT_HINT;
+    scanCaptureBtn.disabled = false;
+    scanCaptureBtn.textContent = "📸 Chụp mã";
+    try {
+      scanStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 960 } }
+      });
+      scanVideo.srcObject = scanStream;
+    } catch (err) {
+      alert("Không mở được camera. Hãy cho phép quyền truy cập camera trong trình duyệt rồi thử lại.");
       closeScanner();
-    });
+    }
   }
 
   function closeScanner(){
     scanModal.classList.remove("show");
-    if (html5QrCode) {
-      html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
-      html5QrCode = null;
+    if (scanStream) {
+      scanStream.getTracks().forEach(t => t.stop());
+      scanStream = null;
+    }
+  }
+
+  async function captureAndRecognize(){
+    if (!scanStream) return;
+    scanCaptureBtn.disabled = true;
+    scanStatus.innerHTML = '<span class="spinner"></span>Đang nhận diện chữ, vui lòng đợi...';
+
+    const w = scanVideo.videoWidth;
+    const h = scanVideo.videoHeight;
+    scanCanvas.width = w;
+    scanCanvas.height = h;
+    scanCanvas.getContext("2d").drawImage(scanVideo, 0, 0, w, h);
+
+    try {
+      const result = await Tesseract.recognize(scanCanvas, "eng");
+      const raw = (result.data.text || "").toUpperCase();
+      // Mã bảo hành dạng BH-XXXXXX hoặc BH-2026-00001: tìm cụm chữ+số có dấu gạch ngang
+      const match = raw.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
+
+      if (match) {
+        const code = match[0].replace(/[^A-Z0-9-]/g, "");
+        if (scanTargetInput) scanTargetInput.value = code;
+        closeScanner();
+      } else {
+        scanStatus.textContent = "Không nhận diện rõ mã. Đưa camera gần hơn, đủ sáng, giữ yên rồi thử lại.";
+        scanCaptureBtn.disabled = false;
+      }
+    } catch (err) {
+      scanStatus.textContent = "Có lỗi khi nhận diện. Vui lòng thử lại.";
+      scanCaptureBtn.disabled = false;
     }
   }
 
