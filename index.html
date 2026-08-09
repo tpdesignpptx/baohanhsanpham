@@ -170,6 +170,19 @@
   }
   .scan-frame.found{ border-color:var(--ok); box-shadow:0 0 0 999px rgba(0,0,0,0.35), 0 0 16px rgba(52,211,153,0.6); }
 
+  /* Vệt quét chạy trong khung xanh, cho biết hệ thống đang thực sự quét liên tục */
+  .scan-line{
+    position:absolute; left:2%; right:2%; height:2px;
+    background:linear-gradient(90deg, transparent, var(--cyan), transparent);
+    top:0; opacity:0.9; pointer-events:none;
+    animation:scanLineMove 1.6s ease-in-out infinite;
+  }
+  @keyframes scanLineMove{
+    0%{ top:6%; }
+    50%{ top:92%; }
+    100%{ top:6%; }
+  }
+
   button{
     width:100%; padding:14px; border:none; border-radius:12px;
     background:linear-gradient(90deg, var(--purple), var(--cyan));
@@ -359,7 +372,7 @@
     </div>
     <div class="scan-camera-wrap">
       <video id="scanVideo" autoplay playsinline muted></video>
-      <div class="scan-frame" id="scanFrame"></div>
+      <div class="scan-frame" id="scanFrame"><div class="scan-line"></div></div>
       <div class="scan-recognized" id="scanRecognized"><span id="scanRecognizedText"></span></div>
     </div>
     <canvas id="scanCanvas" style="display:none;"></canvas>
@@ -478,11 +491,14 @@
     }
   }
 
+  let scanAttemptCount = 0;
+
   function resetToCamera(){
     scanFrame.classList.remove("found");
     scanRecognized.classList.remove("show");
     scanRecognizedText.textContent = "";
     scanStatus.textContent = DEFAULT_HINT;
+    scanAttemptCount = 0;
   }
 
   function closeScanner(){
@@ -499,32 +515,99 @@
     scanLoopTick();
   }
 
+  // Tính toán vùng ảnh (theo pixel gốc của camera) tương ứng với khung xanh hiển thị trên màn hình.
+  // Bắt buộc phải cắt đúng vùng này vì video hiển thị bằng object-fit:cover nên khung xanh trên màn
+  // hình KHÔNG cùng tỉ lệ pixel với ảnh gốc video — cắt sai vùng là nguyên nhân chính khiến máy
+  // luôn đọc nhầm chữ (đọc lẫn cả tấm phiếu nhiều dòng thay vì chỉ đọc đúng 1 dòng mã).
+  function getFrameCropRect(){
+    const rect = scanVideo.getBoundingClientRect();
+    const containerW = rect.width;
+    const containerH = rect.height;
+    const vw = scanVideo.videoWidth;
+    const vh = scanVideo.videoHeight;
+    if (!containerW || !containerH || !vw || !vh) return null;
+
+    const videoAspect = vw / vh;
+    const containerAspect = containerW / containerH;
+    let scale, xOffset = 0, yOffset = 0;
+
+    if (videoAspect > containerAspect) {
+      // video "rộng" hơn khung hiển thị -> khớp theo chiều cao, cắt bớt 2 bên trái/phải
+      scale = containerH / vh;
+      const displayedW = vw * scale;
+      xOffset = (containerW - displayedW) / 2;
+    } else {
+      // video "cao" hơn khung hiển thị -> khớp theo chiều rộng, cắt bớt trên/dưới
+      scale = containerW / vw;
+      const displayedH = vh * scale;
+      yOffset = (containerH - displayedH) / 2;
+    }
+
+    // Khung xanh (.scan-frame) theo CSS: left 8%, top 38%, width 84% (right 8%), height 24%.
+    // Nới rộng thêm biên độ để không quá khắt khe khi khách canh camera lệch nhẹ.
+    const padX = containerW * 0.03;
+    const padY = containerH * 0.05;
+    const boxLeftPx = containerW * 0.08 - padX;
+    const boxTopPx = containerH * 0.38 - padY;
+    const boxWPx = containerW * 0.84 + padX * 2;
+    const boxHPx = containerH * 0.24 + padY * 2;
+
+    let srcX = (boxLeftPx - xOffset) / scale;
+    let srcY = (boxTopPx - yOffset) / scale;
+    let srcW = boxWPx / scale;
+    let srcH = boxHPx / scale;
+
+    // giới hạn trong phạm vi ảnh gốc
+    srcX = Math.max(0, srcX);
+    srcY = Math.max(0, srcY);
+    srcW = Math.min(srcW, vw - srcX);
+    srcH = Math.min(srcH, vh - srcY);
+
+    return { srcX, srcY, srcW, srcH };
+  }
+
   async function scanLoopTick(){
     if (!scanLoopActive) return;
 
     if (!scanBusy && scanVideo.videoWidth) {
       scanBusy = true;
       try {
-        const vw = scanVideo.videoWidth;
-        const vh = scanVideo.videoHeight;
-        scanCanvas.width = vw;
-        scanCanvas.height = vh;
-        const ctx = scanCanvas.getContext("2d");
-        ctx.drawImage(scanVideo, 0, 0, vw, vh);
+        const crop = getFrameCropRect();
+        if (crop && crop.srcW > 0 && crop.srcH > 0) {
+          // phóng to vùng cắt lên để chữ rõ nét hơn cho OCR
+          const UPSCALE = 2.2;
+          const outW = Math.round(crop.srcW * UPSCALE);
+          const outH = Math.round(crop.srcH * UPSCALE);
+          scanCanvas.width = outW;
+          scanCanvas.height = outH;
+          const ctx = scanCanvas.getContext("2d");
+          ctx.drawImage(
+            scanVideo,
+            crop.srcX, crop.srcY, crop.srcW, crop.srcH,
+            0, 0, outW, outH
+          );
 
-        const worker = await getOcrWorker();
-        const { data } = await worker.recognize(scanCanvas);
-        const raw = (data.text || "").trim();
-        const rawUpper = raw.toUpperCase();
+          const worker = await getOcrWorker();
+          const { data } = await worker.recognize(scanCanvas);
+          const raw = (data.text || "").trim();
+          const rawUpper = raw.toUpperCase();
 
-        // Mã bảo hành dạng BH-XXXXXX hoặc BH-2026-00001: tìm cụm chữ+số có dấu gạch ngang
-        const match = rawUpper.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
+          // Mã bảo hành dạng BH-XXXXXX hoặc BH-2026-00001: tìm cụm chữ+số có dấu gạch ngang
+          const match = rawUpper.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
 
-        if (match) {
-          const code = match[0].replace(/[^A-Z0-9-]/g, "");
-          scanBusy = false;
-          handleRecognized(code);
-          return; // dừng vòng lặp, đã nhận diện xong
+          if (match) {
+            const code = match[0].replace(/[^A-Z0-9-]/g, "");
+            scanBusy = false;
+            handleRecognized(code);
+            return; // dừng vòng lặp, đã nhận diện xong
+          }
+
+          scanAttemptCount++;
+          if (scanAttemptCount === 6) {
+            scanStatus.textContent = "Chưa nhận diện được — đưa camera gần hơn, đủ sáng và giữ mã nằm ngang trong khung.";
+          } else if (scanAttemptCount === 14) {
+            scanStatus.textContent = "Vẫn chưa đọc được — thử xoay phiếu cho mã bảo hành thẳng, tránh chói sáng hoặc mờ nét.";
+          }
         }
       } catch (err) {
         // bỏ qua lỗi của 1 lượt đọc, thử lại ở lượt kế tiếp
