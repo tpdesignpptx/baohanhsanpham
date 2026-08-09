@@ -282,7 +282,7 @@
         <div class="field">
           <label for="actCode">Mã bảo hành</label>
           <div class="code-input-wrap">
-            <input type="text" id="actCode" placeholder="VD: BH-2026-00001" required style="text-transform:uppercase">
+            <input type="text" id="actCode" placeholder="Bấm biểu tượng camera để quét mã →" required readonly style="text-transform:uppercase; cursor:pointer;">
             <button type="button" class="scan-btn" data-target="actCode" aria-label="Quét mã bằng camera">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
             </button>
@@ -290,7 +290,7 @@
         </div>
         <button type="submit" id="actBtn">Kích hoạt ngay</button>
       </form>
-      <div class="hint">Mỗi mã bảo hành chỉ kích hoạt được 1 lần duy nhất.</div>
+      <div class="hint">Bấm vào ô mã bảo hành để mở camera quét. Mỗi mã chỉ kích hoạt được 1 lần duy nhất.</div>
       <div class="error-box" id="actError"></div>
       <div class="result" id="actResult">
         <div class="sheen"></div>
@@ -308,7 +308,7 @@
         <div class="field">
           <label for="lkCode">Mã bảo hành</label>
           <div class="code-input-wrap">
-            <input type="text" id="lkCode" placeholder="VD: BH-2026-00001" required maxlength="40" style="text-transform:uppercase">
+            <input type="text" id="lkCode" placeholder="Bấm biểu tượng camera để quét mã →" required readonly maxlength="40" style="text-transform:uppercase; cursor:pointer;">
             <button type="button" class="scan-btn" data-target="lkCode" aria-label="Quét mã bằng camera">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
             </button>
@@ -316,7 +316,7 @@
         </div>
         <button type="submit" id="lkBtn">Tra cứu</button>
       </form>
-      <div class="hint">Mã bảo hành được in trên phiếu bảo hành hoặc gửi qua Zalo khi bạn mua hàng.</div>
+      <div class="hint">Bấm vào ô mã bảo hành để mở camera quét mã in trên phiếu bảo hành.</div>
       <div class="error-box" id="lkError"></div>
       <div class="result" id="lkResult">
         <div class="sheen"></div>
@@ -400,18 +400,41 @@
   // ---- Quét mã bằng camera (chụp ảnh + nhận diện chữ - OCR) ----
   let scanStream = null;
   let scanTargetInput = null;
+  let ocrWorker = null;
   const scanModal = document.getElementById("scanModal");
   const scanVideo = document.getElementById("scanVideo");
   const scanCanvas = document.getElementById("scanCanvas");
   const scanStatus = document.getElementById("scanStatus");
   const scanCaptureBtn = document.getElementById("scanCaptureBtn");
-  const DEFAULT_HINT = "Đưa dãy mã bảo hành vào khung xanh, giữ yên rồi bấm Chụp mã";
+  const DEFAULT_HINT = "Đưa dãy mã bảo hành vào khung xanh, đủ sáng, giữ yên rồi bấm Chụp mã";
+
+  async function getOcrWorker(){
+    if (!ocrWorker) {
+      ocrWorker = await Tesseract.createWorker("eng");
+      await ocrWorker.setParameters({
+        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-",
+        tessedit_pageseg_mode: "7" // đọc như 1 dòng chữ đơn, chính xác hơn cho mã ngắn
+      });
+    }
+    return ocrWorker;
+  }
 
   document.querySelectorAll(".scan-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       scanTargetInput = document.getElementById(btn.dataset.target);
       openScanner();
     });
+  });
+
+  // Bấm thẳng vào ô input (readonly) cũng mở camera, không bắt buộc nhắm đúng icon
+  ["actCode", "lkCode"].forEach(id => {
+    const inp = document.getElementById(id);
+    if (inp) {
+      inp.addEventListener("click", () => {
+        scanTargetInput = inp;
+        openScanner();
+      });
+    }
   });
 
   document.getElementById("scanClose").addEventListener("click", closeScanner);
@@ -427,6 +450,7 @@
         video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 960 } }
       });
       scanVideo.srcObject = scanStream;
+      getOcrWorker(); // tải sẵn engine OCR trong lúc khách canh camera, đỡ mất thời gian chờ lúc chụp
     } catch (err) {
       alert("Không mở được camera. Hãy cho phép quyền truy cập camera trong trình duyệt rồi thử lại.");
       closeScanner();
@@ -441,20 +465,45 @@
     }
   }
 
+  // Xử lý ảnh: chuyển đen-trắng + tăng tương phản mạnh (threshold nhị phân) để OCR đọc rõ hơn
+  function preprocessCanvas(ctx, w, h){
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const d = imgData.data;
+    const THRESHOLD = 150; // 0-255, chỉnh thấp hơn nếu ảnh quá tối, cao hơn nếu ảnh quá sáng
+    for (let i = 0; i < d.length; i += 4) {
+      const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      const v = gray > THRESHOLD ? 255 : 0;
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
   async function captureAndRecognize(){
     if (!scanStream) return;
     scanCaptureBtn.disabled = true;
     scanStatus.innerHTML = '<span class="spinner"></span>Đang nhận diện chữ, vui lòng đợi...';
 
-    const w = scanVideo.videoWidth;
-    const h = scanVideo.videoHeight;
-    scanCanvas.width = w;
-    scanCanvas.height = h;
-    scanCanvas.getContext("2d").drawImage(scanVideo, 0, 0, w, h);
+    const vw = scanVideo.videoWidth;
+    const vh = scanVideo.videoHeight;
+
+    // Chỉ lấy đúng vùng nằm trong khung xanh hiển thị trên màn hình (bỏ nền xung quanh gây nhiễu)
+    const cropX = Math.round(vw * 0.10);
+    const cropY = Math.round(vh * 0.38);
+    const cropW = Math.round(vw * 0.80);
+    const cropH = Math.round(vh * 0.24);
+
+    // Phóng to gấp đôi vùng cắt trước khi đưa vào OCR — chữ càng lớn càng dễ đọc chính xác
+    const scale = 2;
+    scanCanvas.width = cropW * scale;
+    scanCanvas.height = cropH * scale;
+    const ctx = scanCanvas.getContext("2d");
+    ctx.drawImage(scanVideo, cropX, cropY, cropW, cropH, 0, 0, cropW * scale, cropH * scale);
+    preprocessCanvas(ctx, scanCanvas.width, scanCanvas.height);
 
     try {
-      const result = await Tesseract.recognize(scanCanvas, "eng");
-      const raw = (result.data.text || "").toUpperCase();
+      const worker = await getOcrWorker();
+      const { data } = await worker.recognize(scanCanvas);
+      const raw = (data.text || "").toUpperCase();
       // Mã bảo hành dạng BH-XXXXXX hoặc BH-2026-00001: tìm cụm chữ+số có dấu gạch ngang
       const match = raw.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
 
