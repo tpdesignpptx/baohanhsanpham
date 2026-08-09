@@ -358,7 +358,7 @@
     <button type="button" id="scanCaptureBtn" class="scan-capture-btn">📸 Chụp mã</button>
 
     <div class="scan-debug" id="scanDebug" style="display:none;">
-      <div class="scan-debug-title">Ảnh vừa chụp (đã xử lý đen-trắng):</div>
+      <div class="scan-debug-title">Ảnh vừa chụp:</div>
       <img id="scanDebugImg" alt="Ảnh đã chụp">
       <div class="scan-debug-title">Chữ máy đọc được:</div>
       <div class="scan-debug-text" id="scanDebugText">—</div>
@@ -507,42 +507,20 @@
     }
   }
 
-  // Xử lý ảnh: chuyển đen-trắng, ngưỡng tự tính theo độ sáng trung bình của chính ảnh vừa chụp
-  // (thay vì ngưỡng cố định — tự thích nghi ánh sáng thật lúc chụp, không cần đoán mò)
-  function preprocessCanvas(ctx, w, h){
-    const imgData = ctx.getImageData(0, 0, w, h);
-    const d = imgData.data;
-    let sum = 0;
-    const grays = new Uint8ClampedArray(w * h);
-    for (let i = 0, p = 0; i < d.length; i += 4, p++) {
-      const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      grays[p] = gray;
-      sum += gray;
-    }
-    const avg = sum / grays.length;
-    const threshold = avg * 0.82; // ngưỡng thấp hơn trung bình ảnh 1 chút, tách chữ tối khỏi nền sáng
-    for (let i = 0, p = 0; i < d.length; i += 4, p++) {
-      const v = grays[p] > threshold ? 255 : 0;
-      d[i] = d[i + 1] = d[i + 2] = v;
-    }
-    ctx.putImageData(imgData, 0, 0);
-  }
-
   async function captureAndRecognize(){
     if (!scanStream) return;
     scanCaptureBtn.disabled = true;
     scanStatus.innerHTML = '<span class="spinner"></span>Đang nhận diện chữ, vui lòng đợi...';
 
-    // Chụp TOÀN BỘ khung hình camera (không cắt vùng riêng, tránh lệch chỗ do camera co giãn khác màn hình)
+    // Chụp TOÀN BỘ khung hình camera, giữ nguyên ảnh màu gốc (không xử lý đen-trắng)
     const vw = scanVideo.videoWidth;
     const vh = scanVideo.videoHeight;
     scanCanvas.width = vw;
     scanCanvas.height = vh;
     const ctx = scanCanvas.getContext("2d");
     ctx.drawImage(scanVideo, 0, 0, vw, vh);
-    preprocessCanvas(ctx, vw, vh);
 
-    // Hiện ảnh vừa xử lý để kiểm tra
+    // Hiện ảnh vừa chụp để kiểm tra
     scanDebugImg.src = scanCanvas.toDataURL("image/png");
 
     try {
