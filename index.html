@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <style>
   :root{
     --bg-0:#0b0b14;
@@ -144,16 +145,26 @@
   .scan-camera-wrap{ position:relative; width:100%; background:#000; aspect-ratio:4/3; overflow:hidden; }
   .scan-camera-wrap video{ width:100%; height:100%; object-fit:cover; display:block; }
   .scan-frame{
-    position:absolute; left:10%; right:10%; top:38%; height:24%;
-    border:2px solid var(--cyan); border-radius:10px;
-    box-shadow:0 0 0 999px rgba(0,0,0,0.35);
+    position:absolute; left:20%; right:20%; top:16%; height:60%;
     pointer-events:none;
+    box-shadow:0 0 0 999px rgba(0,0,0,0.4);
+    border-radius:14px;
   }
+  .scan-frame::before, .scan-frame::after,
+  .scan-frame span::before, .scan-frame span::after{ content:""; }
+  .corner{
+    position:absolute; width:26px; height:26px; border:3px solid var(--cyan);
+  }
+  .corner.tl{ top:-2px; left:-2px; border-right:none; border-bottom:none; border-radius:10px 0 0 0; }
+  .corner.tr{ top:-2px; right:-2px; border-left:none; border-bottom:none; border-radius:0 10px 0 0; }
+  .corner.bl{ bottom:-2px; left:-2px; border-right:none; border-top:none; border-radius:0 0 0 10px; }
+  .corner.br{ bottom:-2px; right:-2px; border-left:none; border-top:none; border-radius:0 0 10px 0; }
+  .scan-frame.found .corner{ border-color:var(--ok); }
   .scan-hint{ padding:14px 16px 18px; font-size:12px; color:var(--text-dim); text-align:center; line-height:1.5; min-height:34px; }
 
   /* Chữ trắng hiện giữa khung khi nhận diện xong mã */
   .scan-recognized{
-    position:absolute; left:8%; right:8%; top:38%; height:24%;
+    position:absolute; left:14%; right:14%; top:16%; height:60%;
     display:none; align-items:center; justify-content:center;
     border-radius:10px; text-align:center; padding:6px 10px;
     pointer-events:none;
@@ -168,7 +179,6 @@
     from{ opacity:0; transform:scale(.92); }
     to{ opacity:1; transform:scale(1); }
   }
-  .scan-frame.found{ border-color:var(--ok); box-shadow:0 0 0 999px rgba(0,0,0,0.35), 0 0 16px rgba(52,211,153,0.6); }
 
   /* Vệt quét chạy trong khung xanh, cho biết hệ thống đang thực sự quét liên tục */
   .scan-line{
@@ -372,11 +382,15 @@
     </div>
     <div class="scan-camera-wrap">
       <video id="scanVideo" autoplay playsinline muted></video>
-      <div class="scan-frame" id="scanFrame"><div class="scan-line"></div></div>
+      <div class="scan-frame" id="scanFrame">
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+        <div class="scan-line"></div>
+      </div>
       <div class="scan-recognized" id="scanRecognized"><span id="scanRecognizedText"></span></div>
     </div>
     <canvas id="scanCanvas" style="display:none;"></canvas>
-    <div class="scan-hint" id="scanStatus">Đưa dãy mã bảo hành vào khung xanh, giữ yên máy — hệ thống sẽ tự nhận diện</div>
+    <div class="scan-hint" id="scanStatus">Đưa mã QR trên phiếu bảo hành vào khung — hệ thống tự quét, không cần bấm gì</div>
   </div>
 </div>
 
@@ -429,11 +443,15 @@
   })();
 
   // ---- Quét mã bằng camera: tự động nhận diện liên tục, không cần bấm chụp ----
+  // Ưu tiên đọc MÃ QR in sẵn trên phiếu (nhanh, chính xác, không phụ thuộc ánh sáng/góc như đọc chữ).
+  // Nếu không thấy QR trong khung hình, mới thử đọc dòng chữ "Mã bảo hành" bằng OCR (dự phòng, chậm hơn).
   let scanStream = null;
   let scanTargetInput = null;
   let ocrWorker = null;
   let scanLoopActive = false;
   let scanBusy = false;
+  let scanTickCounter = 0;
+  let scanAttemptCount = 0;
   const scanModal = document.getElementById("scanModal");
   const scanVideo = document.getElementById("scanVideo");
   const scanCanvas = document.getElementById("scanCanvas");
@@ -441,8 +459,9 @@
   const scanFrame = document.getElementById("scanFrame");
   const scanRecognized = document.getElementById("scanRecognized");
   const scanRecognizedText = document.getElementById("scanRecognizedText");
-  const DEFAULT_HINT = "Đưa dãy mã bảo hành vào khung xanh, giữ yên máy — hệ thống sẽ tự nhận diện";
-  const SCAN_INTERVAL_MS = 700;
+  const DEFAULT_HINT = "Đưa mã QR trên phiếu bảo hành vào khung — hệ thống tự quét, không cần bấm gì";
+  const SCAN_INTERVAL_MS = 350;   // quét QR rất nhanh, gần như liên tục
+  const OCR_EVERY_N_TICKS = 4;    // đọc chữ (chậm hơn) chỉ chạy dự phòng mỗi vài lượt
 
   async function getOcrWorker(){
     if (!ocrWorker) {
@@ -483,7 +502,7 @@
         video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1440 } }
       });
       scanVideo.srcObject = scanStream;
-      await getOcrWorker();
+      getOcrWorker(); // chuẩn bị sẵn engine OCR trong nền, dùng khi cần dự phòng
       startAutoScanLoop();
     } catch (err) {
       alert("Không mở được camera. Hãy cho phép quyền truy cập camera trong trình duyệt rồi thử lại.");
@@ -491,14 +510,13 @@
     }
   }
 
-  let scanAttemptCount = 0;
-
   function resetToCamera(){
     scanFrame.classList.remove("found");
     scanRecognized.classList.remove("show");
     scanRecognizedText.textContent = "";
     scanStatus.textContent = DEFAULT_HINT;
     scanAttemptCount = 0;
+    scanTickCounter = 0;
   }
 
   function closeScanner(){
@@ -515,10 +533,47 @@
     scanLoopTick();
   }
 
-  // Tính toán vùng ảnh (theo pixel gốc của camera) tương ứng với khung xanh hiển thị trên màn hình.
-  // Bắt buộc phải cắt đúng vùng này vì video hiển thị bằng object-fit:cover nên khung xanh trên màn
-  // hình KHÔNG cùng tỉ lệ pixel với ảnh gốc video — cắt sai vùng là nguyên nhân chính khiến máy
-  // luôn đọc nhầm chữ (đọc lẫn cả tấm phiếu nhiều dòng thay vì chỉ đọc đúng 1 dòng mã).
+  // Từ nội dung QR (thường là link kèm ?code=... hoặc chính là mã) tách ra mã bảo hành
+  function extractCodeFromText(text){
+    if (!text) return null;
+    const trimmed = text.trim();
+    // Nếu QR chứa link (vd: .../warranty.html?code=BH-XXXXXX)
+    try {
+      const url = new URL(trimmed);
+      const codeParam = url.searchParams.get("code");
+      if (codeParam) {
+        const c = codeParam.trim().toUpperCase();
+        const m = c.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
+        if (m) return m[0];
+      }
+    } catch (e) { /* không phải URL, bỏ qua */ }
+
+    // Nếu QR/chữ chứa thẳng mã dạng BH-XXXXXX
+    const upper = trimmed.toUpperCase();
+    const match = upper.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
+    return match ? match[0] : null;
+  }
+
+  // Thử quét mã QR trên toàn bộ khung hình camera — nhanh, không cần cắt vùng
+  function tryDecodeQr(){
+    if (typeof jsQR !== "function") return null;
+    const vw = scanVideo.videoWidth;
+    const vh = scanVideo.videoHeight;
+    scanCanvas.width = vw;
+    scanCanvas.height = vh;
+    const ctx = scanCanvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(scanVideo, 0, 0, vw, vh);
+    const imageData = ctx.getImageData(0, 0, vw, vh);
+    const result = jsQR(imageData.data, vw, vh, { inversionAttempts: "attemptBoth" });
+    if (result && result.data) {
+      return extractCodeFromText(result.data);
+    }
+    return null;
+  }
+
+  // Tính toán vùng ảnh (theo pixel gốc của camera) tương ứng với khung hiển thị trên màn hình.
+  // Bắt buộc phải cắt đúng vùng này vì video hiển thị bằng object-fit:cover nên khung trên màn
+  // hình KHÔNG cùng tỉ lệ pixel với ảnh gốc video.
   function getFrameCropRect(){
     const rect = scanVideo.getBoundingClientRect();
     const containerW = rect.width;
@@ -532,32 +587,26 @@
     let scale, xOffset = 0, yOffset = 0;
 
     if (videoAspect > containerAspect) {
-      // video "rộng" hơn khung hiển thị -> khớp theo chiều cao, cắt bớt 2 bên trái/phải
       scale = containerH / vh;
       const displayedW = vw * scale;
       xOffset = (containerW - displayedW) / 2;
     } else {
-      // video "cao" hơn khung hiển thị -> khớp theo chiều rộng, cắt bớt trên/dưới
       scale = containerW / vw;
       const displayedH = vh * scale;
       yOffset = (containerH - displayedH) / 2;
     }
 
-    // Khung xanh (.scan-frame) theo CSS: left 8%, top 38%, width 84% (right 8%), height 24%.
-    // Nới rộng thêm biên độ để không quá khắt khe khi khách canh camera lệch nhẹ.
-    const padX = containerW * 0.03;
-    const padY = containerH * 0.05;
-    const boxLeftPx = containerW * 0.08 - padX;
-    const boxTopPx = containerH * 0.38 - padY;
-    const boxWPx = containerW * 0.84 + padX * 2;
-    const boxHPx = containerH * 0.24 + padY * 2;
+    // Khung quét (.scan-frame) theo CSS: left 20%, top 16%, width 60% (right 20%), height 60%.
+    const boxLeftPx = containerW * 0.20;
+    const boxTopPx = containerH * 0.16;
+    const boxWPx = containerW * 0.60;
+    const boxHPx = containerH * 0.60;
 
     let srcX = (boxLeftPx - xOffset) / scale;
     let srcY = (boxTopPx - yOffset) / scale;
     let srcW = boxWPx / scale;
     let srcH = boxHPx / scale;
 
-    // giới hạn trong phạm vi ảnh gốc
     srcX = Math.max(0, srcX);
     srcY = Math.max(0, srcY);
     srcW = Math.min(srcW, vw - srcX);
@@ -566,47 +615,57 @@
     return { srcX, srcY, srcW, srcH };
   }
 
+  // Đọc chữ (OCR) trong vùng khung quét — dùng dự phòng khi không thấy QR
+  async function tryOcrCode(){
+    const crop = getFrameCropRect();
+    if (!crop || crop.srcW <= 0 || crop.srcH <= 0) return null;
+
+    const UPSCALE = 2.2;
+    const outW = Math.round(crop.srcW * UPSCALE);
+    const outH = Math.round(crop.srcH * UPSCALE);
+    scanCanvas.width = outW;
+    scanCanvas.height = outH;
+    const ctx = scanCanvas.getContext("2d");
+    ctx.drawImage(
+      scanVideo,
+      crop.srcX, crop.srcY, crop.srcW, crop.srcH,
+      0, 0, outW, outH
+    );
+
+    const worker = await getOcrWorker();
+    const { data } = await worker.recognize(scanCanvas);
+    return extractCodeFromText(data.text || "");
+  }
+
   async function scanLoopTick(){
     if (!scanLoopActive) return;
 
     if (!scanBusy && scanVideo.videoWidth) {
       scanBusy = true;
       try {
-        const crop = getFrameCropRect();
-        if (crop && crop.srcW > 0 && crop.srcH > 0) {
-          // phóng to vùng cắt lên để chữ rõ nét hơn cho OCR
-          const UPSCALE = 2.2;
-          const outW = Math.round(crop.srcW * UPSCALE);
-          const outH = Math.round(crop.srcH * UPSCALE);
-          scanCanvas.width = outW;
-          scanCanvas.height = outH;
-          const ctx = scanCanvas.getContext("2d");
-          ctx.drawImage(
-            scanVideo,
-            crop.srcX, crop.srcY, crop.srcW, crop.srcH,
-            0, 0, outW, outH
-          );
+        // 1. Ưu tiên quét mã QR trước — nhanh và chính xác hơn nhiều so với đọc chữ
+        const qrCode = tryDecodeQr();
+        if (qrCode) {
+          scanBusy = false;
+          handleRecognized(qrCode);
+          return;
+        }
 
-          const worker = await getOcrWorker();
-          const { data } = await worker.recognize(scanCanvas);
-          const raw = (data.text || "").trim();
-          const rawUpper = raw.toUpperCase();
-
-          // Mã bảo hành dạng BH-XXXXXX hoặc BH-2026-00001: tìm cụm chữ+số có dấu gạch ngang
-          const match = rawUpper.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
-
-          if (match) {
-            const code = match[0].replace(/[^A-Z0-9-]/g, "");
+        // 2. Không thấy QR -> thử đọc chữ "Mã bảo hành" in trên phiếu (chạy dự phòng, không phải mỗi lượt)
+        scanTickCounter++;
+        if (scanTickCounter % OCR_EVERY_N_TICKS === 0) {
+          const ocrCode = await tryOcrCode();
+          if (ocrCode) {
             scanBusy = false;
-            handleRecognized(code);
-            return; // dừng vòng lặp, đã nhận diện xong
+            handleRecognized(ocrCode);
+            return;
           }
 
           scanAttemptCount++;
-          if (scanAttemptCount === 6) {
-            scanStatus.textContent = "Chưa nhận diện được — đưa camera gần hơn, đủ sáng và giữ mã nằm ngang trong khung.";
-          } else if (scanAttemptCount === 14) {
-            scanStatus.textContent = "Vẫn chưa đọc được — thử xoay phiếu cho mã bảo hành thẳng, tránh chói sáng hoặc mờ nét.";
+          if (scanAttemptCount === 5) {
+            scanStatus.textContent = "Chưa thấy mã QR — đưa gần hơn, đủ sáng và giữ máy ổn định.";
+          } else if (scanAttemptCount === 12) {
+            scanStatus.textContent = "Nếu phiếu không có QR, canh dòng \"Mã bảo hành\" nằm ngang, rõ nét trong khung.";
           }
         }
       } catch (err) {
