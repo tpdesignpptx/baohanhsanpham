@@ -456,14 +456,35 @@
     return head + "x".repeat(midLen) + tail;
   }
 
-  // Cố gắng đọc nhiều định dạng ngày khác nhau trả về từ Apps Script
+  // Cố gắng đọc nhiều định dạng ngày (kèm giờ:phút nếu có) trả về từ Apps Script
   function parseFlexibleDate(str){
     if (!str) return null;
     const s = String(str).trim();
-    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (m) return new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59);
-    m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-    if (m) return new Date(+m[3], +m[2] - 1, +m[1], 23, 59, 59);
+
+    // yyyy-mm-dd [HH:MM[:SS]]
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (m) {
+      const hasTime = m[4] !== undefined;
+      return new Date(
+        +m[1], +m[2] - 1, +m[3],
+        hasTime ? +m[4] : 23,
+        hasTime ? +m[5] : 59,
+        hasTime ? (m[6] ? +m[6] : 0) : 59
+      );
+    }
+
+    // dd/mm/yyyy hoặc dd-mm-yyyy [HH:MM[:SS]]
+    m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (m) {
+      const hasTime = m[4] !== undefined;
+      return new Date(
+        +m[3], +m[2] - 1, +m[1],
+        hasTime ? +m[4] : 23,
+        hasTime ? +m[5] : 59,
+        hasTime ? (m[6] ? +m[6] : 0) : 59
+      );
+    }
+
     const d = new Date(s);
     return isNaN(d.getTime()) ? null : d;
   }
