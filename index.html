@@ -338,9 +338,8 @@
           </div>
         </div>
         <div class="scan-status-line" id="actScanStatus"></div>
-        <button type="submit" id="actBtn">Kích hoạt ngay</button>
       </form>
-      <div class="hint">Điền tên &amp; số điện thoại trước, sau đó bấm vào ô mã bảo hành — camera sẽ tự quét, và hệ thống tự động kích hoạt ngay khi nhận diện đủ mã. Mỗi mã chỉ kích hoạt được 1 lần duy nhất.</div>
+      <div class="hint">Điền tên &amp; số điện thoại, sau đó bấm vào ô mã bảo hành — camera sẽ tự quét và hệ thống tự động kích hoạt ngay khi đủ thông tin. Không cần bấm nút nào cả. Mỗi mã chỉ kích hoạt được 1 lần duy nhất.</div>
       <div class="error-box" id="actError"></div>
       <div class="result" id="actResult">
         <div class="sheen"></div>
@@ -379,9 +378,8 @@
           </div>
         </div>
         <div class="scan-status-line" id="lkScanStatus"></div>
-        <button type="submit" id="lkBtn">Tra cứu</button>
       </form>
-      <div class="hint">Điền số điện thoại trước, sau đó bấm vào ô mã bảo hành — camera sẽ tự quét và tự động tra cứu ngay khi nhận diện đủ mã.</div>
+      <div class="hint">Điền số điện thoại, sau đó bấm vào ô mã bảo hành — camera sẽ tự quét và tự động tra cứu ngay khi đủ thông tin. Không cần bấm nút nào cả.</div>
       <div class="error-box" id="lkError"></div>
       <div class="result" id="lkResult">
         <div class="sheen"></div>
@@ -715,27 +713,43 @@
     });
   });
 
-  // ---- Kích hoạt ----
+  // ---- Kích hoạt (hoàn toàn tự động, không cần nút bấm) ----
   const activateForm = document.getElementById("activateForm");
-  const actBtn = document.getElementById("actBtn");
   const actError = document.getElementById("actError");
   const actResult = document.getElementById("actResult");
+  const actNameInput = document.getElementById("actName");
+  const actPhoneInput = document.getElementById("actPhone");
+  const actCodeInput = document.getElementById("actCode");
+  let actProcessing = false;
+  let actLastAttempt = "";
 
-  activateForm.addEventListener("submit", async function(e){
-    e.preventDefault();
-    await submitActivate({
-      name: document.getElementById("actName").value.trim(),
-      phone: document.getElementById("actPhone").value.trim(),
-      code: document.getElementById("actCode").value.trim()
-    });
-  });
+  // Chặn submit mặc định của form (phòng trường hợp Enter), xử lý qua hàm chung
+  activateForm.addEventListener("submit", function(e){ e.preventDefault(); });
+
+  // Khi người dùng điền/sửa xong tên hoặc SĐT (rời khỏi ô), tự kiểm tra và kích hoạt nếu đã đủ dữ liệu
+  actNameInput.addEventListener("blur", maybeAutoSubmitActivate);
+  actPhoneInput.addEventListener("blur", maybeAutoSubmitActivate);
+
+  function maybeAutoSubmitActivate(){
+    if (actProcessing) return;
+    const name = actNameInput.value.trim();
+    const phone = actPhoneInput.value.trim();
+    const code = actCodeInput.value.trim();
+    if (!name || !phone || !code) return;
+    const sig = name + "|" + phone + "|" + code;
+    if (sig === actLastAttempt) return; // tránh gửi lại đúng dữ liệu vừa thử
+    actLastAttempt = sig;
+    submitActivate({ name, phone, code });
+  }
 
   async function submitActivate({ name, phone, code }){
+    actProcessing = true;
     actError.classList.remove("show");
     actResult.classList.remove("show");
     document.getElementById("actCountdownWrap").style.display = "none";
-    actBtn.disabled = true;
-    actBtn.innerHTML = '<span class="spinner"></span>Đang xử lý...';
+    actNameInput.disabled = true;
+    actPhoneInput.disabled = true;
+    setInlineScanStatus("activate", "Đang xử lý, vui lòng đợi...", "");
 
     try {
       const data = await callApi({ action: "activate", name, phone, code });
@@ -754,37 +768,50 @@
         startCountdown(data.expireDate, "act");
         setInlineScanStatus("activate", "Kích hoạt thành công!", "ok");
         activateForm.reset();
+        actLastAttempt = "";
       }
     } catch (err) {
       actError.textContent = "Có lỗi khi kết nối hệ thống. Vui lòng thử lại sau.";
       actError.classList.add("show");
       setInlineScanStatus("activate", "Có lỗi khi kết nối hệ thống.", "err");
     } finally {
-      actBtn.disabled = false;
-      actBtn.textContent = "Kích hoạt ngay";
+      actNameInput.disabled = false;
+      actPhoneInput.disabled = false;
+      actProcessing = false;
     }
   }
 
-  // ---- Tra cứu ----
+  // ---- Tra cứu (hoàn toàn tự động, không cần nút bấm) ----
   const lookupForm = document.getElementById("lookupForm");
-  const lkBtn = document.getElementById("lkBtn");
   const lkError = document.getElementById("lkError");
   const lkResult = document.getElementById("lkResult");
+  const lkPhoneInput = document.getElementById("lkPhone");
+  const lkCodeInput = document.getElementById("lkCode");
+  let lkProcessing = false;
+  let lkLastAttempt = "";
 
-  lookupForm.addEventListener("submit", async function(e){
-    e.preventDefault();
-    await submitLookup({
-      phone: document.getElementById("lkPhone").value.trim(),
-      code: document.getElementById("lkCode").value.trim()
-    });
-  });
+  lookupForm.addEventListener("submit", function(e){ e.preventDefault(); });
+
+  lkPhoneInput.addEventListener("blur", maybeAutoSubmitLookup);
+
+  function maybeAutoSubmitLookup(){
+    if (lkProcessing) return;
+    const phone = lkPhoneInput.value.trim();
+    const code = lkCodeInput.value.trim();
+    if (!phone || !code) return;
+    const sig = phone + "|" + code;
+    if (sig === lkLastAttempt) return;
+    lkLastAttempt = sig;
+    submitLookup({ phone, code });
+  }
 
   async function submitLookup({ phone, code }){
+    lkProcessing = true;
     lkError.classList.remove("show");
     lkResult.classList.remove("show");
     document.getElementById("lkCountdownWrap").style.display = "none";
-    lkBtn.disabled = true;
-    lkBtn.innerHTML = '<span class="spinner"></span>Đang tra cứu...';
+    lkPhoneInput.disabled = true;
+    setInlineScanStatus("lookup", "Đang tra cứu, vui lòng đợi...", "");
 
     try {
       const data = await callApi({ action: "lookup", phone, code });
@@ -818,8 +845,8 @@
       lkError.classList.add("show");
       setInlineScanStatus("lookup", "Có lỗi khi kết nối hệ thống.", "err");
     } finally {
-      lkBtn.disabled = false;
-      lkBtn.textContent = "Tra cứu";
+      lkPhoneInput.disabled = false;
+      lkProcessing = false;
     }
   }
 </script>
