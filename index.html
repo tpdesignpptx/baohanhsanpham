@@ -59,7 +59,6 @@
     letter-spacing:0.3px;
   }
 
-  /* Nội dung chính chỉ hiện dần sau khi loader biến mất */
   #mainContent{
     width:100%; max-width:460px;
     opacity:0; transform:translateY(14px);
@@ -106,7 +105,6 @@
   input::placeholder{ color:#5c5c6e; }
   input:focus{ border-color:var(--purple); box-shadow:0 0 0 3px rgba(139,92,246,0.18); }
 
-  /* ===== Ô nhập mã kèm nút quét camera ===== */
   .code-input-wrap{ position:relative; }
   .code-input-wrap input{ padding-right:52px; }
   .scan-btn{
@@ -120,7 +118,7 @@
   .scan-btn svg{ width:18px; height:18px; stroke:var(--text); }
   .scan-btn:hover{ opacity:1; background:rgba(255,255,255,0.12); }
 
-  /* ===== Modal quét mã bằng camera (nhận diện chữ - OCR) ===== */
+  /* ===== Modal quét mã tự động bằng camera (OCR liên tục) ===== */
   .scan-modal{
     position:fixed; inset:0; z-index:1000;
     background:rgba(5,5,10,0.88);
@@ -144,13 +142,43 @@
   .scan-camera-wrap{ position:relative; width:100%; background:#000; aspect-ratio:4/3; overflow:hidden; }
   .scan-camera-wrap video{ width:100%; height:100%; object-fit:cover; display:block; }
   .scan-frame{
-    position:absolute; left:10%; right:10%; top:38%; height:24%;
+    position:absolute; left:8%; right:8%; top:38%; height:24%;
     border:2px solid var(--cyan); border-radius:10px;
     box-shadow:0 0 0 999px rgba(0,0,0,0.35);
     pointer-events:none;
+    transition:border-color .25s, box-shadow .25s;
   }
-  .scan-hint{ padding:12px 16px 4px; font-size:12px; color:var(--text-dim); text-align:center; line-height:1.5; min-height:34px; }
-  .scan-capture-btn{ margin:10px 16px 16px; width:calc(100% - 32px); }
+  .scan-frame.pulsing{ animation:framePulse 1.4s ease-in-out infinite; }
+  @keyframes framePulse{
+    0%,100%{ border-color:var(--cyan); }
+    50%{ border-color:rgba(34,211,238,0.4); }
+  }
+  .scan-frame.detected{
+    border-color:var(--ok);
+    animation:none;
+    box-shadow:0 0 0 999px rgba(0,0,0,0.35), 0 0 22px rgba(52,211,153,0.55);
+  }
+  /* mã trắng hiện lên trong khung khi nhận diện đủ kí tự */
+  .scan-code-overlay{
+    position:absolute; left:8%; right:8%; top:38%; height:24%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:4px; pointer-events:none;
+    opacity:0; transform:scale(.9); transition:opacity .3s ease, transform .3s ease;
+    z-index:2;
+  }
+  .scan-code-overlay.show{ opacity:1; transform:scale(1); }
+  .scan-code-overlay .code-text{
+    color:#ffffff; font-weight:800; font-size:19px; letter-spacing:1px;
+    text-shadow:0 2px 10px rgba(0,0,0,0.8);
+    background:rgba(0,0,0,0.35); padding:4px 12px; border-radius:8px;
+  }
+  .scan-code-overlay .code-done{
+    color:var(--ok); font-weight:700; font-size:11.5px;
+    text-shadow:0 1px 6px rgba(0,0,0,0.8);
+  }
+  .scan-hint{ padding:12px 16px 16px; font-size:12.5px; color:var(--text-dim); text-align:center; line-height:1.5; min-height:20px; }
+  .scan-hint.ok{ color:var(--ok); font-weight:700; }
+  .scan-hint.err{ color:var(--err); }
 
   button{
     width:100%; padding:14px; border:none; border-radius:12px;
@@ -184,7 +212,6 @@
     from{ opacity:0; transform:translateY(10px) scale(.97); }
     to{ opacity:1; transform:translateY(0) scale(1); }
   }
-  /* các "giọt" ánh sáng loang nhẹ phía sau, tạo cảm giác chất lỏng */
   .result::before, .result::after{
     content:""; position:absolute; border-radius:50%;
     filter:blur(30px); opacity:0.35; pointer-events:none;
@@ -202,7 +229,6 @@
     0%, 100%{ transform:translate(0,0) scale(1); }
     50%{ transform:translate(12px,-10px) scale(1.12); }
   }
-  /* vệt sáng chạy nhẹ trên viền, hiệu ứng kính lỏng */
   .result .sheen{
     position:absolute; inset:0; border-radius:18px; pointer-events:none;
     background:linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.10) 45%, transparent 60%);
@@ -232,6 +258,21 @@
   .info-row .k{ color:var(--text-dim); }
   .info-row .v{ font-weight:600; text-align:right; }
 
+  /* ===== Đếm ngược thời gian bảo hành ===== */
+  .countdown-wrap{ display:none; margin-top:16px; }
+  .countdown-label{ font-size:12px; color:var(--text-dim); text-align:center; margin-bottom:8px; font-weight:600; }
+  .countdown-boxes{ display:flex; gap:8px; justify-content:center; }
+  .cbox{
+    flex:1; max-width:70px; text-align:center;
+    background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);
+    border-radius:10px; padding:8px 4px;
+  }
+  .cbox span{ display:block; font-size:19px; font-weight:800;
+    background:linear-gradient(90deg, var(--purple), var(--cyan));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .cbox small{ font-size:10px; color:var(--text-dim); font-weight:600; letter-spacing:.3px; }
+
   .error-box{
     margin-top:20px; padding:14px 16px; border-radius:12px;
     background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.25);
@@ -244,6 +285,14 @@
     border-top-color:#0b0b14; border-radius:50%; display:inline-block;
     animation:spin .6s linear infinite; vertical-align:middle; margin-right:8px;
   }
+
+  .scan-status-line{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    font-size:12.5px; font-weight:600; color:var(--text-dim); margin-top:-6px; margin-bottom:14px;
+    min-height:18px;
+  }
+  .scan-status-line.ok{ color:var(--ok); }
+  .scan-status-line.err{ color:var(--err); }
 
   footer{ text-align:center; color:var(--text-dim); font-size:11.5px; margin-top:22px; }
 </style>
@@ -288,23 +337,38 @@
             </button>
           </div>
         </div>
+        <div class="scan-status-line" id="actScanStatus"></div>
         <button type="submit" id="actBtn">Kích hoạt ngay</button>
       </form>
-      <div class="hint">Bấm vào ô mã bảo hành để mở camera quét. Mỗi mã chỉ kích hoạt được 1 lần duy nhất.</div>
+      <div class="hint">Điền tên &amp; số điện thoại trước, sau đó bấm vào ô mã bảo hành — camera sẽ tự quét, và hệ thống tự động kích hoạt ngay khi nhận diện đủ mã. Mỗi mã chỉ kích hoạt được 1 lần duy nhất.</div>
       <div class="error-box" id="actError"></div>
       <div class="result" id="actResult">
         <div class="sheen"></div>
         <span class="status-badge ok"><span class="dot"></span>Kích hoạt thành công</span>
+        <div class="info-row"><span class="k">Khách hàng</span><span class="v" id="actRPhone">—</span></div>
         <div class="info-row"><span class="k">Sản phẩm</span><span class="v" id="actRSanPham">—</span></div>
         <div class="info-row"><span class="k">Thời hạn</span><span class="v" id="actRThoiHan">—</span></div>
         <div class="info-row"><span class="k">Ngày kích hoạt</span><span class="v" id="actRNgayKH">—</span></div>
         <div class="info-row"><span class="k">Hết hạn vào</span><span class="v" id="actRHetHan">—</span></div>
+        <div class="countdown-wrap" id="actCountdownWrap">
+          <div class="countdown-label">Thời gian bảo hành còn lại</div>
+          <div class="countdown-boxes">
+            <div class="cbox"><span id="actCdDays">0</span><small>NGÀY</small></div>
+            <div class="cbox"><span id="actCdHours">00</span><small>GIỜ</small></div>
+            <div class="cbox"><span id="actCdMins">00</span><small>PHÚT</small></div>
+            <div class="cbox"><span id="actCdSecs">00</span><small>GIÂY</small></div>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- FORM TRA CỨU -->
     <div class="panel" id="panel-lookup">
       <form id="lookupForm" autocomplete="off">
+        <div class="field">
+          <label for="lkPhone">Số điện thoại</label>
+          <input type="tel" id="lkPhone" placeholder="09xxxxxxxx" required>
+        </div>
         <div class="field">
           <label for="lkCode">Mã bảo hành</label>
           <div class="code-input-wrap">
@@ -314,17 +378,28 @@
             </button>
           </div>
         </div>
+        <div class="scan-status-line" id="lkScanStatus"></div>
         <button type="submit" id="lkBtn">Tra cứu</button>
       </form>
-      <div class="hint">Bấm vào ô mã bảo hành để mở camera quét mã in trên phiếu bảo hành.</div>
+      <div class="hint">Điền số điện thoại trước, sau đó bấm vào ô mã bảo hành — camera sẽ tự quét và tự động tra cứu ngay khi nhận diện đủ mã.</div>
       <div class="error-box" id="lkError"></div>
       <div class="result" id="lkResult">
         <div class="sheen"></div>
         <span class="status-badge" id="lkBadge"><span class="dot"></span><span id="lkStatusText"></span></span>
+        <div class="info-row"><span class="k">Khách hàng</span><span class="v" id="lkRPhone">—</span></div>
         <div class="info-row"><span class="k">Sản phẩm</span><span class="v" id="lkSanPham">—</span></div>
         <div class="info-row"><span class="k">Ngày kích hoạt</span><span class="v" id="lkNgayKH">—</span></div>
         <div class="info-row"><span class="k">Thời hạn bảo hành</span><span class="v" id="lkThoiHan">—</span></div>
         <div class="info-row"><span class="k">Hết hạn vào</span><span class="v" id="lkHetHan">—</span></div>
+        <div class="countdown-wrap" id="lkCountdownWrap">
+          <div class="countdown-label">Thời gian bảo hành còn lại</div>
+          <div class="countdown-boxes">
+            <div class="cbox"><span id="lkCdDays">0</span><small>NGÀY</small></div>
+            <div class="cbox"><span id="lkCdHours">00</span><small>GIỜ</small></div>
+            <div class="cbox"><span id="lkCdMins">00</span><small>PHÚT</small></div>
+            <div class="cbox"><span id="lkCdSecs">00</span><small>GIÂY</small></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -336,16 +411,19 @@
 <div class="scan-modal" id="scanModal">
   <div class="scan-modal-inner">
     <div class="scan-header">
-      <span>Quét mã bảo hành</span>
+      <span>Đang tự động quét mã...</span>
       <button type="button" id="scanClose">✕ Đóng</button>
     </div>
     <div class="scan-camera-wrap">
       <video id="scanVideo" autoplay playsinline muted></video>
-      <div class="scan-frame"></div>
+      <div class="scan-frame pulsing" id="scanFrame"></div>
+      <div class="scan-code-overlay" id="scanCodeOverlay">
+        <span class="code-text" id="scanCodeText"></span>
+        <span class="code-done">✓ Hoàn tất</span>
+      </div>
     </div>
     <canvas id="scanCanvas" style="display:none;"></canvas>
-    <div class="scan-hint" id="scanStatus">Đưa dãy mã bảo hành vào khung xanh, giữ yên rồi bấm Chụp mã</div>
-    <button type="button" id="scanCaptureBtn" class="scan-capture-btn">📸 Chụp mã</button>
+    <div class="scan-hint" id="scanStatus">Đưa dãy mã bảo hành vào khung xanh, giữ yên — camera sẽ tự nhận diện</div>
   </div>
 </div>
 
@@ -353,7 +431,6 @@
   // ==== CẤU HÌNH ====
   const API_URL = "https://script.google.com/macros/s/AKfycbw4AEVeDZ5U76X3qpa6RkhBTddYuJ7UIDIWo7n2QakST1yoal_wVETwPDyHZrRh0FrAsw/exec";
 
-  // ---- Loader màn hình tải trang ----
   window.addEventListener("load", function(){
     setTimeout(function(){
       var loader = document.getElementById("loader");
@@ -369,6 +446,63 @@
     return String(str);
   }
 
+  // Che bớt số điện thoại: giữ 3 số đầu + 2 số cuối, phần giữa hiện thành x
+  function maskPhone(phone){
+    const digits = (phone || "").replace(/\D/g, "");
+    if (digits.length <= 5) return digits || "—";
+    const head = digits.slice(0, 3);
+    const tail = digits.slice(-2);
+    const midLen = digits.length - head.length - tail.length;
+    return head + "x".repeat(midLen) + tail;
+  }
+
+  // Cố gắng đọc nhiều định dạng ngày khác nhau trả về từ Apps Script
+  function parseFlexibleDate(str){
+    if (!str) return null;
+    const s = String(str).trim();
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59);
+    m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (m) return new Date(+m[3], +m[2] - 1, +m[1], 23, 59, 59);
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  let actCountdownTimer = null;
+  let lkCountdownTimer = null;
+
+  function startCountdown(expireStr, prefix){
+    const wrap = document.getElementById(prefix + "CountdownWrap");
+    if (prefix === "act" && actCountdownTimer) { clearInterval(actCountdownTimer); actCountdownTimer = null; }
+    if (prefix === "lk" && lkCountdownTimer) { clearInterval(lkCountdownTimer); lkCountdownTimer = null; }
+
+    const target = parseFlexibleDate(expireStr);
+    if (!target) { wrap.style.display = "none"; return; }
+
+    function tick(){
+      const diff = target.getTime() - Date.now();
+      if (diff <= 0) {
+        wrap.style.display = "none";
+        if (prefix === "act" && actCountdownTimer) { clearInterval(actCountdownTimer); actCountdownTimer = null; }
+        if (prefix === "lk" && lkCountdownTimer) { clearInterval(lkCountdownTimer); lkCountdownTimer = null; }
+        return;
+      }
+      const days = Math.floor(diff / 86400000);
+      const hours = Math.floor((diff / 3600000) % 24);
+      const mins = Math.floor((diff / 60000) % 60);
+      const secs = Math.floor((diff / 1000) % 60);
+      document.getElementById(prefix + "CdDays").textContent = days;
+      document.getElementById(prefix + "CdHours").textContent = String(hours).padStart(2, "0");
+      document.getElementById(prefix + "CdMins").textContent = String(mins).padStart(2, "0");
+      document.getElementById(prefix + "CdSecs").textContent = String(secs).padStart(2, "0");
+    }
+
+    wrap.style.display = "block";
+    tick();
+    const interval = setInterval(tick, 1000);
+    if (prefix === "act") actCountdownTimer = interval; else lkCountdownTimer = interval;
+  }
+
   async function callApi(payload){
     const res = await fetch(API_URL, {
       method: "POST",
@@ -379,7 +513,6 @@
     return res.json();
   }
 
-  // ---- Tự điền mã bảo hành nếu mở link kèm ?code=... (từ QR trên phiếu bảo hành) ----
   (function autofillFromQR(){
     const params = new URLSearchParams(window.location.search);
     const codeFromUrl = params.get("code");
@@ -387,7 +520,6 @@
       const code = codeFromUrl.trim().toUpperCase();
       document.getElementById("actCode").value = code;
       document.getElementById("lkCode").value = code;
-      // để mặc định ở tab Kích hoạt, focus sẵn vào ô Họ tên cho khách điền tiếp
       window.addEventListener("load", function(){
         setTimeout(function(){
           const nameInput = document.getElementById("actName");
@@ -397,47 +529,67 @@
     }
   })();
 
-  // ---- Quét mã bằng camera (chụp ảnh + nhận diện chữ - OCR) ----
+  // ==== QUÉT MÃ TỰ ĐỘNG BẰNG CAMERA (OCR liên tục, không cần bấm chụp) ====
   let scanStream = null;
   let scanTargetInput = null;
+  let scanContext = null; // "activate" | "lookup"
+  let scanLoopActive = false;
+  let scanBusy = false;
+
   const scanModal = document.getElementById("scanModal");
   const scanVideo = document.getElementById("scanVideo");
   const scanCanvas = document.getElementById("scanCanvas");
   const scanStatus = document.getElementById("scanStatus");
-  const scanCaptureBtn = document.getElementById("scanCaptureBtn");
-  const DEFAULT_HINT = "Đưa dãy mã bảo hành vào khung xanh, giữ yên rồi bấm Chụp mã";
+  const scanFrame = document.getElementById("scanFrame");
+  const scanCodeOverlay = document.getElementById("scanCodeOverlay");
+  const scanCodeText = document.getElementById("scanCodeText");
+  const DEFAULT_HINT = "Đưa dãy mã bảo hành vào khung xanh, giữ yên — camera sẽ tự nhận diện";
+
+  function setInlineScanStatus(context, text, cls){
+    const el = document.getElementById(context === "activate" ? "actScanStatus" : "lkScanStatus");
+    if (!el) return;
+    el.textContent = text || "";
+    el.className = "scan-status-line" + (cls ? " " + cls : "");
+  }
 
   document.querySelectorAll(".scan-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       scanTargetInput = document.getElementById(btn.dataset.target);
+      scanContext = btn.dataset.target === "actCode" ? "activate" : "lookup";
       openScanner();
     });
   });
 
-  // Bấm thẳng vào ô input (readonly) cũng mở camera, không bắt buộc nhắm đúng icon
   ["actCode", "lkCode"].forEach(id => {
     const inp = document.getElementById(id);
     if (inp) {
       inp.addEventListener("click", () => {
         scanTargetInput = inp;
+        scanContext = id === "actCode" ? "activate" : "lookup";
         openScanner();
       });
     }
   });
 
   document.getElementById("scanClose").addEventListener("click", closeScanner);
-  scanCaptureBtn.addEventListener("click", captureAndRecognize);
+
+  function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
   async function openScanner(){
     scanModal.classList.add("show");
     scanStatus.textContent = DEFAULT_HINT;
-    scanCaptureBtn.disabled = false;
-    scanCaptureBtn.textContent = "📸 Chụp mã";
+    scanStatus.className = "scan-hint";
+    scanFrame.classList.remove("detected");
+    scanFrame.classList.add("pulsing");
+    scanCodeOverlay.classList.remove("show");
+    scanCodeText.textContent = "";
     try {
       scanStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 960 } }
       });
       scanVideo.srcObject = scanStream;
+      // đợi camera sẵn sàng rồi bắt đầu vòng quét tự động
+      scanVideo.onloadedmetadata = () => { startAutoScanLoop(); };
     } catch (err) {
       alert("Không mở được camera. Hãy cho phép quyền truy cập camera trong trình duyệt rồi thử lại.");
       closeScanner();
@@ -445,6 +597,7 @@
   }
 
   function closeScanner(){
+    scanLoopActive = false;
     scanModal.classList.remove("show");
     if (scanStream) {
       scanStream.getTracks().forEach(t => t.stop());
@@ -452,13 +605,18 @@
     }
   }
 
-  async function captureAndRecognize(){
-    if (!scanStream) return;
-    scanCaptureBtn.disabled = true;
-    scanStatus.innerHTML = '<span class="spinner"></span>Đang nhận diện chữ, vui lòng đợi...';
+  async function startAutoScanLoop(){
+    scanLoopActive = true;
+    while (scanLoopActive && scanStream) {
+      if (!scanBusy) await ocrTick();
+      await sleep(250);
+    }
+  }
 
-    const w = scanVideo.videoWidth;
-    const h = scanVideo.videoHeight;
+  async function ocrTick(){
+    if (!scanVideo.videoWidth || scanBusy) return;
+    scanBusy = true;
+    const w = scanVideo.videoWidth, h = scanVideo.videoHeight;
     scanCanvas.width = w;
     scanCanvas.height = h;
     scanCanvas.getContext("2d").drawImage(scanVideo, 0, 0, w, h);
@@ -468,18 +626,60 @@
       const raw = (result.data.text || "").toUpperCase();
       // Mã bảo hành dạng BH-XXXXXX hoặc BH-2026-00001: tìm cụm chữ+số có dấu gạch ngang
       const match = raw.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
-
-      if (match) {
+      if (match && scanLoopActive) {
         const code = match[0].replace(/[^A-Z0-9-]/g, "");
-        if (scanTargetInput) scanTargetInput.value = code;
-        closeScanner();
-      } else {
-        scanStatus.textContent = "Không nhận diện rõ mã. Đưa camera gần hơn, đủ sáng, giữ yên rồi thử lại.";
-        scanCaptureBtn.disabled = false;
+        handleCodeDetected(code);
       }
     } catch (err) {
-      scanStatus.textContent = "Có lỗi khi nhận diện. Vui lòng thử lại.";
-      scanCaptureBtn.disabled = false;
+      // bỏ qua lỗi từng lượt quét, tiếp tục vòng lặp
+    } finally {
+      scanBusy = false;
+    }
+  }
+
+  function handleCodeDetected(code){
+    scanLoopActive = false;
+    const targetInput = scanTargetInput;
+    const context = scanContext;
+
+    if (targetInput) targetInput.value = code;
+
+    // Hiện mã trắng lên trong khung quét, báo hoàn tất
+    scanCodeText.textContent = code;
+    scanCodeOverlay.classList.add("show");
+    scanFrame.classList.remove("pulsing");
+    scanFrame.classList.add("detected");
+    scanStatus.textContent = "Đã nhận diện đủ mã — Hoàn tất!";
+    scanStatus.className = "scan-hint ok";
+
+    setTimeout(async () => {
+      closeScanner();
+      await autoSubmitAfterScan(context, code);
+    }, 850);
+  }
+
+  // Sau khi quét xong, tự động kích hoạt / tra cứu nếu đã đủ thông tin cần thiết
+  async function autoSubmitAfterScan(context, code){
+    if (!code) return;
+
+    if (context === "activate") {
+      const name = document.getElementById("actName").value.trim();
+      const phone = document.getElementById("actPhone").value.trim();
+      if (!name || !phone) {
+        setInlineScanStatus("activate", "Đã nhận được mã " + code + " — vui lòng điền đủ Họ tên & Số điện thoại rồi bấm Kích hoạt ngay.", "");
+        return;
+      }
+      setInlineScanStatus("activate", "Đã nhận diện mã " + code + ", đang tự động kích hoạt...", "");
+      await submitActivate({ name, phone, code });
+
+    } else if (context === "lookup") {
+      const phone = document.getElementById("lkPhone").value.trim();
+      if (!phone) {
+        setInlineScanStatus("lookup", "Đã nhận được mã " + code + " — vui lòng điền Số điện thoại rồi bấm Tra cứu.", "");
+        return;
+      }
+      setInlineScanStatus("lookup", "Đã nhận diện mã " + code + ", đang tự động tra cứu...", "");
+      await submitLookup({ phone, code });
     }
   }
 
@@ -502,38 +702,47 @@
 
   activateForm.addEventListener("submit", async function(e){
     e.preventDefault();
+    await submitActivate({
+      name: document.getElementById("actName").value.trim(),
+      phone: document.getElementById("actPhone").value.trim(),
+      code: document.getElementById("actCode").value.trim()
+    });
+  });
+
+  async function submitActivate({ name, phone, code }){
     actError.classList.remove("show");
     actResult.classList.remove("show");
+    document.getElementById("actCountdownWrap").style.display = "none";
     actBtn.disabled = true;
     actBtn.innerHTML = '<span class="spinner"></span>Đang xử lý...';
 
     try {
-      const data = await callApi({
-        action: "activate",
-        name: document.getElementById("actName").value.trim(),
-        phone: document.getElementById("actPhone").value.trim(),
-        code: document.getElementById("actCode").value.trim()
-      });
+      const data = await callApi({ action: "activate", name, phone, code });
 
       if (!data.success) {
         actError.textContent = data.message || "Kích hoạt không thành công.";
         actError.classList.add("show");
+        setInlineScanStatus("activate", data.message || "Mã không hợp lệ hoặc đã được sử dụng.", "err");
       } else {
+        document.getElementById("actRPhone").textContent = maskPhone(phone);
         document.getElementById("actRSanPham").textContent = esc(data.product);
         document.getElementById("actRThoiHan").textContent = esc(data.duration);
         document.getElementById("actRNgayKH").textContent = esc(data.activateDate);
         document.getElementById("actRHetHan").textContent = esc(data.expireDate);
         actResult.classList.add("show");
+        startCountdown(data.expireDate, "act");
+        setInlineScanStatus("activate", "Kích hoạt thành công!", "ok");
         activateForm.reset();
       }
     } catch (err) {
       actError.textContent = "Có lỗi khi kết nối hệ thống. Vui lòng thử lại sau.";
       actError.classList.add("show");
+      setInlineScanStatus("activate", "Có lỗi khi kết nối hệ thống.", "err");
     } finally {
       actBtn.disabled = false;
       actBtn.textContent = "Kích hoạt ngay";
     }
-  });
+  }
 
   // ---- Tra cứu ----
   const lookupForm = document.getElementById("lookupForm");
@@ -543,21 +752,28 @@
 
   lookupForm.addEventListener("submit", async function(e){
     e.preventDefault();
+    await submitLookup({
+      phone: document.getElementById("lkPhone").value.trim(),
+      code: document.getElementById("lkCode").value.trim()
+    });
+  });
+
+  async function submitLookup({ phone, code }){
     lkError.classList.remove("show");
     lkResult.classList.remove("show");
+    document.getElementById("lkCountdownWrap").style.display = "none";
     lkBtn.disabled = true;
     lkBtn.innerHTML = '<span class="spinner"></span>Đang tra cứu...';
 
     try {
-      const data = await callApi({
-        action: "lookup",
-        code: document.getElementById("lkCode").value.trim()
-      });
+      const data = await callApi({ action: "lookup", phone, code });
 
       if (!data.found) {
         lkError.textContent = data.message || "Không tìm thấy thông tin bảo hành.";
         lkError.classList.add("show");
+        setInlineScanStatus("lookup", data.message || "Không tìm thấy mã trong hệ thống.", "err");
       } else {
+        document.getElementById("lkRPhone").textContent = maskPhone(phone);
         document.getElementById("lkSanPham").textContent = esc(data.sanPham);
         document.getElementById("lkNgayKH").textContent = esc(data.ngayKichHoat);
         document.getElementById("lkThoiHan").textContent = esc(data.thoiHanBaoHanh);
@@ -569,15 +785,22 @@
         statusText.textContent = data.conBaoHanh ? "Còn bảo hành" : "Đã hết hạn bảo hành";
 
         lkResult.classList.add("show");
+        if (data.conBaoHanh) {
+          startCountdown(data.ngayHetHan, "lk");
+        } else {
+          document.getElementById("lkCountdownWrap").style.display = "none";
+        }
+        setInlineScanStatus("lookup", "Tra cứu thành công!", "ok");
       }
     } catch (err) {
       lkError.textContent = "Có lỗi khi kết nối hệ thống. Vui lòng thử lại sau.";
       lkError.classList.add("show");
+      setInlineScanStatus("lookup", "Có lỗi khi kết nối hệ thống.", "err");
     } finally {
       lkBtn.disabled = false;
       lkBtn.textContent = "Tra cứu";
     }
-  });
+  }
 </script>
 
 </body>
