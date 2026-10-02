@@ -548,7 +548,7 @@
     }
   })();
 
-  // ==== QUÉT MÃ TỰ ĐỘNG BẰNG CAMERA (OCR liên tục, không cần bấm chụp) ====
+  // ==== QUÉT MÃ TỰ ĐỘNG BẰNG CAMERA (OCR TỐI ƯU HÓA ĐỘ CHÍNH XÁC) ====
   let scanStream = null;
   let scanTargetInput = null;
   let scanContext = null; // "activate" | "lookup"
@@ -607,7 +607,6 @@
         video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 960 } }
       });
       scanVideo.srcObject = scanStream;
-      // đợi camera sẵn sàng rồi bắt đầu vòng quét tự động
       scanVideo.onloadedmetadata = () => { startAutoScanLoop(); };
     } catch (err) {
       alert("Không mở được camera. Hãy cho phép quyền truy cập camera trong trình duyệt rồi thử lại.");
@@ -632,25 +631,78 @@
     }
   }
 
+  // --- HÀM HỖ TRỢ XỬ LÝ ẢNH TRƯỚC KHI ĐỌC OCR ---
+  function preprocessCanvas(sourceCanvas) {
+    const sw = sourceCanvas.width;
+    const sh = sourceCanvas.height;
+
+    // Cắt đúng vùng khung xanh (left: 8%, top: 38%, width: 84%, height: 24%)
+    const cropX = sw * 0.08;
+    const cropY = sh * 0.38;
+    const cropW = sw * 0.84;
+    const cropH = sh * 0.24;
+
+    const procCanvas = document.createElement("canvas");
+    // Phóng to 2x để Tesseract dễ quét chữ
+    procCanvas.width = cropW * 2;
+    procCanvas.height = cropH * 2;
+    const ctx = procCanvas.getContext("2d");
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(sourceCanvas, cropX, cropY, cropW, cropH, 0, 0, procCanvas.width, procCanvas.height);
+
+    // Binarization: Chuyển ảnh sang trắng đen độ tương phản cao
+    const imgData = ctx.getImageData(0, 0, procCanvas.width, procCanvas.height);
+    const d = imgData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const avg = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      const v = avg < 130 ? 0 : 255;
+      d[i] = v;
+      d[i + 1] = v;
+      d[i + 2] = v;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    return procCanvas;
+  }
+
+  function sanitizeOcrText(text) {
+    return text
+      .toUpperCase()
+      .replace(/[\r\n\t]+/g, " ")
+      .replace(/—|–/g, "-")
+      .replace(/[\s.,:_|\\\/]+/g, "")
+      .replace(/BH0/g, "BH-")
+      .replace(/BHO/g, "BH-");
+  }
+
   async function ocrTick(){
     if (!scanVideo.videoWidth || scanBusy) return;
     scanBusy = true;
+
     const w = scanVideo.videoWidth, h = scanVideo.videoHeight;
     scanCanvas.width = w;
     scanCanvas.height = h;
     scanCanvas.getContext("2d").drawImage(scanVideo, 0, 0, w, h);
 
+    const processedCanvas = preprocessCanvas(scanCanvas);
+
     try {
-      const result = await Tesseract.recognize(scanCanvas, "eng");
-      const raw = (result.data.text || "").toUpperCase();
-      // Mã bảo hành dạng BH-XXXXXX hoặc BH-2026-00001: tìm cụm chữ+số có dấu gạch ngang
-      const match = raw.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
+      const result = await Tesseract.recognize(processedCanvas, "eng", {
+        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-",
+        tessedit_pageseg_mode: "7"
+      });
+
+      const raw = sanitizeOcrText(result.data.text || "");
+      const match = raw.match(/BH-[A-Z0-9]{4,12}/) || raw.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
+
       if (match && scanLoopActive) {
-        const code = match[0].replace(/[^A-Z0-9-]/g, "");
+        const code = match[0];
         handleCodeDetected(code);
       }
     } catch (err) {
-      // bỏ qua lỗi từng lượt quét, tiếp tục vòng lặp
+      // bỏ qua lỗi từng lượt quét
     } finally {
       scanBusy = false;
     }
@@ -663,7 +715,6 @@
 
     if (targetInput) targetInput.value = code;
 
-    // Hiện mã trắng lên trong khung quét, báo hoàn tất
     scanCodeText.textContent = code;
     scanCodeOverlay.classList.add("show");
     scanFrame.classList.remove("pulsing");
@@ -677,7 +728,6 @@
     }, 850);
   }
 
-  // Sau khi quét xong, tự động kích hoạt / tra cứu nếu đã đủ thông tin cần thiết
   async function autoSubmitAfterScan(context, code){
     if (!code) return;
 
@@ -713,7 +763,7 @@
     });
   });
 
-  // ---- Kích hoạt (hoàn toàn tự động, không cần nút bấm) ----
+  // ---- Kích hoạt ----
   const activateForm = document.getElementById("activateForm");
   const actError = document.getElementById("actError");
   const actResult = document.getElementById("actResult");
@@ -723,10 +773,8 @@
   let actProcessing = false;
   let actLastAttempt = "";
 
-  // Chặn submit mặc định của form (phòng trường hợp Enter), xử lý qua hàm chung
   activateForm.addEventListener("submit", function(e){ e.preventDefault(); });
 
-  // Khi người dùng điền/sửa xong tên hoặc SĐT (rời khỏi ô), tự kiểm tra và kích hoạt nếu đã đủ dữ liệu
   actNameInput.addEventListener("blur", maybeAutoSubmitActivate);
   actPhoneInput.addEventListener("blur", maybeAutoSubmitActivate);
 
@@ -737,7 +785,7 @@
     const code = actCodeInput.value.trim();
     if (!name || !phone || !code) return;
     const sig = name + "|" + phone + "|" + code;
-    if (sig === actLastAttempt) return; // tránh gửi lại đúng dữ liệu vừa thử
+    if (sig === actLastAttempt) return;
     actLastAttempt = sig;
     submitActivate({ name, phone, code });
   }
@@ -781,7 +829,7 @@
     }
   }
 
-  // ---- Tra cứu (hoàn toàn tự động, không cần nút bấm) ----
+  // ---- Tra cứu ----
   const lookupForm = document.getElementById("lookupForm");
   const lkError = document.getElementById("lkError");
   const lkResult = document.getElementById("lkResult");
