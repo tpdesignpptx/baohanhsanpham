@@ -444,7 +444,6 @@
     return String(str);
   }
 
-  // Che bớt số điện thoại: giữ 3 số đầu + 2 số cuối, phần giữa hiện thành x
   function maskPhone(phone){
     const digits = (phone || "").replace(/\D/g, "");
     if (digits.length <= 5) return digits || "—";
@@ -454,12 +453,10 @@
     return head + "x".repeat(midLen) + tail;
   }
 
-  // Cố gắng đọc nhiều định dạng ngày (kèm giờ:phút nếu có) trả về từ Apps Script
   function parseFlexibleDate(str){
     if (!str) return null;
     const s = String(str).trim();
 
-    // yyyy-mm-dd [HH:MM[:SS]]
     let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
     if (m) {
       const hasTime = m[4] !== undefined;
@@ -471,7 +468,6 @@
       );
     }
 
-    // dd/mm/yyyy hoặc dd-mm-yyyy [HH:MM[:SS]]
     m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
     if (m) {
       const hasTime = m[4] !== undefined;
@@ -548,12 +544,13 @@
     }
   })();
 
-  // ==== QUÉT MÃ TỰ ĐỘNG BẰNG CAMERA (OCR TỐI ƯU HÓA ĐỘ CHÍNH XÁC) ====
+  // ==== QUÉT MÃ TỰ ĐỘNG BẰNG CAMERA ====
   let scanStream = null;
   let scanTargetInput = null;
-  let scanContext = null; // "activate" | "lookup"
+  let scanContext = null;
   let scanLoopActive = false;
   let scanBusy = false;
+  let tesseractWorker = null;
 
   const scanModal = document.getElementById("scanModal");
   const scanVideo = document.getElementById("scanVideo");
@@ -596,20 +593,32 @@
 
   async function openScanner(){
     scanModal.classList.add("show");
-    scanStatus.textContent = DEFAULT_HINT;
+    scanStatus.textContent = "Đang khởi tạo camera...";
     scanStatus.className = "scan-hint";
     scanFrame.classList.remove("detected");
     scanFrame.classList.add("pulsing");
     scanCodeOverlay.classList.remove("show");
     scanCodeText.textContent = "";
+
     try {
+      if (!tesseractWorker) {
+        tesseractWorker = await Tesseract.createWorker("eng");
+        await tesseractWorker.setParameters({
+          tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-",
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
+        });
+      }
+
       scanStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 960 } }
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
       });
       scanVideo.srcObject = scanStream;
-      scanVideo.onloadedmetadata = () => { startAutoScanLoop(); };
+      scanVideo.onloadedmetadata = () => {
+        scanStatus.textContent = DEFAULT_HINT;
+        startAutoScanLoop();
+      };
     } catch (err) {
-      alert("Không mở được camera. Hãy cho phép quyền truy cập camera trong trình duyệt rồi thử lại.");
+      alert("Không mở được camera. Vui lòng cho phép quyền truy cập camera.");
       closeScanner();
     }
   }
@@ -627,58 +636,47 @@
     scanLoopActive = true;
     while (scanLoopActive && scanStream) {
       if (!scanBusy) await ocrTick();
-      await sleep(250);
+      await sleep(200);
     }
   }
 
-  // --- HÀM HỖ TRỢ XỬ LÝ ẢNH TRƯỚC KHI ĐỌC OCR ---
+  // --- CẮT XỬ LÝ ẢNH BẰNG NÉT NÂNG CAO ---
   function preprocessCanvas(sourceCanvas) {
     const sw = sourceCanvas.width;
     const sh = sourceCanvas.height;
 
-    // Cắt đúng vùng khung xanh (left: 8%, top: 38%, width: 84%, height: 24%)
+    // Cắt vừa vặn vùng khung cyan
     const cropX = sw * 0.08;
     const cropY = sh * 0.38;
     const cropW = sw * 0.84;
     const cropH = sh * 0.24;
 
     const procCanvas = document.createElement("canvas");
-    // Phóng to 2x để Tesseract dễ quét chữ
     procCanvas.width = cropW * 2;
     procCanvas.height = cropH * 2;
     const ctx = procCanvas.getContext("2d");
 
+    // Lọc độ tương phản và grayscale tự nhiên (tránh làm gãy chữ)
+    ctx.filter = "grayscale(100%) contrast(200%) brightness(90%)";
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(sourceCanvas, cropX, cropY, cropW, cropH, 0, 0, procCanvas.width, procCanvas.height);
 
-    // Binarization: Chuyển ảnh sang trắng đen độ tương phản cao
-    const imgData = ctx.getImageData(0, 0, procCanvas.width, procCanvas.height);
-    const d = imgData.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const avg = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      const v = avg < 130 ? 0 : 255;
-      d[i] = v;
-      d[i + 1] = v;
-      d[i + 2] = v;
-    }
-    ctx.putImageData(imgData, 0, 0);
-
     return procCanvas;
   }
 
-  function sanitizeOcrText(text) {
-    return text
+  function cleanText(raw) {
+    if (!raw) return "";
+    return raw
       .toUpperCase()
-      .replace(/[\r\n\t]+/g, " ")
-      .replace(/—|–/g, "-")
+      .replace(/[\r\n]/g, "")
       .replace(/[\s.,:_|\\\/]+/g, "")
       .replace(/BH0/g, "BH-")
       .replace(/BHO/g, "BH-");
   }
 
   async function ocrTick(){
-    if (!scanVideo.videoWidth || scanBusy) return;
+    if (!scanVideo.videoWidth || scanBusy || !tesseractWorker) return;
     scanBusy = true;
 
     const w = scanVideo.videoWidth, h = scanVideo.videoHeight;
@@ -689,20 +687,17 @@
     const processedCanvas = preprocessCanvas(scanCanvas);
 
     try {
-      const result = await Tesseract.recognize(processedCanvas, "eng", {
-        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-",
-        tessedit_pageseg_mode: "7"
-      });
+      const { data } = await tesseractWorker.recognize(processedCanvas);
+      const text = cleanText(data.text);
 
-      const raw = sanitizeOcrText(result.data.text || "");
-      const match = raw.match(/BH-[A-Z0-9]{4,12}/) || raw.match(/[A-Z]{2,4}-[A-Z0-9-]{4,15}/);
+      // Nhận diện định dạng mã tiêu chuẩn BH-XXXXXX hoặc dạng chéo bất kỳ có cấu trúc gạch ngang
+      const match = text.match(/BH-[A-Z0-9]{4,12}/) || text.match(/[A-Z]{2,4}-[A-Z0-9]{4,12}/);
 
       if (match && scanLoopActive) {
-        const code = match[0];
-        handleCodeDetected(code);
+        handleCodeDetected(match[0]);
       }
     } catch (err) {
-      // bỏ qua lỗi từng lượt quét
+      // bỏ qua lượt lỗi
     } finally {
       scanBusy = false;
     }
@@ -710,22 +705,19 @@
 
   function handleCodeDetected(code){
     scanLoopActive = false;
-    const targetInput = scanTargetInput;
-    const context = scanContext;
-
-    if (targetInput) targetInput.value = code;
+    if (scanTargetInput) scanTargetInput.value = code;
 
     scanCodeText.textContent = code;
     scanCodeOverlay.classList.add("show");
     scanFrame.classList.remove("pulsing");
     scanFrame.classList.add("detected");
-    scanStatus.textContent = "Đã nhận diện đủ mã — Hoàn tất!";
+    scanStatus.textContent = "Đã nhận diện: " + code;
     scanStatus.className = "scan-hint ok";
 
     setTimeout(async () => {
       closeScanner();
-      await autoSubmitAfterScan(context, code);
-    }, 850);
+      await autoSubmitAfterScan(scanContext, code);
+    }, 700);
   }
 
   async function autoSubmitAfterScan(context, code){
@@ -735,24 +727,24 @@
       const name = document.getElementById("actName").value.trim();
       const phone = document.getElementById("actPhone").value.trim();
       if (!name || !phone) {
-        setInlineScanStatus("activate", "Đã nhận được mã " + code + " — vui lòng điền đủ Họ tên & Số điện thoại rồi bấm Kích hoạt ngay.", "");
+        setInlineScanStatus("activate", "Đã nhận mã " + code + " — Vui lòng nhập Tên & SĐT để hoàn tất.", "");
         return;
       }
-      setInlineScanStatus("activate", "Đã nhận diện mã " + code + ", đang tự động kích hoạt...", "");
+      setInlineScanStatus("activate", "Đã quét thành công, đang tự động kích hoạt...", "");
       await submitActivate({ name, phone, code });
 
     } else if (context === "lookup") {
       const phone = document.getElementById("lkPhone").value.trim();
       if (!phone) {
-        setInlineScanStatus("lookup", "Đã nhận được mã " + code + " — vui lòng điền Số điện thoại rồi bấm Tra cứu.", "");
+        setInlineScanStatus("lookup", "Đã nhận mã " + code + " — Vui lòng nhập SĐT để tra cứu.", "");
         return;
       }
-      setInlineScanStatus("lookup", "Đã nhận diện mã " + code + ", đang tự động tra cứu...", "");
+      setInlineScanStatus("lookup", "Đã quét thành công, đang tự động tra cứu...", "");
       await submitLookup({ phone, code });
     }
   }
 
-  // ---- Tab switching ----
+  // ---- Switch Tabs ----
   const tabs = document.querySelectorAll(".tab");
   tabs.forEach(tab => {
     tab.addEventListener("click", () => {
@@ -763,7 +755,7 @@
     });
   });
 
-  // ---- Kích hoạt ----
+  // ---- Form Kích hoạt ----
   const activateForm = document.getElementById("activateForm");
   const actError = document.getElementById("actError");
   const actResult = document.getElementById("actResult");
@@ -773,8 +765,7 @@
   let actProcessing = false;
   let actLastAttempt = "";
 
-  activateForm.addEventListener("submit", function(e){ e.preventDefault(); });
-
+  activateForm.addEventListener("submit", e => e.preventDefault());
   actNameInput.addEventListener("blur", maybeAutoSubmitActivate);
   actPhoneInput.addEventListener("blur", maybeAutoSubmitActivate);
 
@@ -797,15 +788,15 @@
     document.getElementById("actCountdownWrap").style.display = "none";
     actNameInput.disabled = true;
     actPhoneInput.disabled = true;
-    setInlineScanStatus("activate", "Đang xử lý, vui lòng đợi...", "");
+    setInlineScanStatus("activate", "Đang xử lý kích hoạt...", "");
 
     try {
       const data = await callApi({ action: "activate", name, phone, code });
 
       if (!data.success) {
-        actError.textContent = data.message || "Kích hoạt không thành công.";
+        actError.textContent = data.message || "Kích hoạt thất bại.";
         actError.classList.add("show");
-        setInlineScanStatus("activate", data.message || "Mã không hợp lệ hoặc đã được sử dụng.", "err");
+        setInlineScanStatus("activate", data.message || "Mã không hợp lệ hoặc đã dùng.", "err");
       } else {
         document.getElementById("actRPhone").textContent = maskPhone(phone);
         document.getElementById("actRSanPham").textContent = esc(data.product);
@@ -819,9 +810,9 @@
         actLastAttempt = "";
       }
     } catch (err) {
-      actError.textContent = "Có lỗi khi kết nối hệ thống. Vui lòng thử lại sau.";
+      actError.textContent = "Không thể kết nối máy chủ.";
       actError.classList.add("show");
-      setInlineScanStatus("activate", "Có lỗi khi kết nối hệ thống.", "err");
+      setInlineScanStatus("activate", "Lỗi kết nối.", "err");
     } finally {
       actNameInput.disabled = false;
       actPhoneInput.disabled = false;
@@ -829,7 +820,7 @@
     }
   }
 
-  // ---- Tra cứu ----
+  // ---- Form Tra cứu ----
   const lookupForm = document.getElementById("lookupForm");
   const lkError = document.getElementById("lkError");
   const lkResult = document.getElementById("lkResult");
@@ -838,8 +829,7 @@
   let lkProcessing = false;
   let lkLastAttempt = "";
 
-  lookupForm.addEventListener("submit", function(e){ e.preventDefault(); });
-
+  lookupForm.addEventListener("submit", e => e.preventDefault());
   lkPhoneInput.addEventListener("blur", maybeAutoSubmitLookup);
 
   function maybeAutoSubmitLookup(){
@@ -859,15 +849,15 @@
     lkResult.classList.remove("show");
     document.getElementById("lkCountdownWrap").style.display = "none";
     lkPhoneInput.disabled = true;
-    setInlineScanStatus("lookup", "Đang tra cứu, vui lòng đợi...", "");
+    setInlineScanStatus("lookup", "Đang tra cứu dữ liệu...", "");
 
     try {
       const data = await callApi({ action: "lookup", phone, code });
 
       if (!data.found) {
-        lkError.textContent = data.message || "Không tìm thấy thông tin bảo hành.";
+        lkError.textContent = data.message || "Không tìm thấy bảo hành.";
         lkError.classList.add("show");
-        setInlineScanStatus("lookup", data.message || "Không tìm thấy mã trong hệ thống.", "err");
+        setInlineScanStatus("lookup", data.message || "Mã không có trong hệ thống.", "err");
       } else {
         document.getElementById("lkRPhone").textContent = maskPhone(phone);
         document.getElementById("lkSanPham").textContent = esc(data.sanPham);
@@ -889,9 +879,9 @@
         setInlineScanStatus("lookup", "Tra cứu thành công!", "ok");
       }
     } catch (err) {
-      lkError.textContent = "Có lỗi khi kết nối hệ thống. Vui lòng thử lại sau.";
+      lkError.textContent = "Lỗi kết nối máy chủ.";
       lkError.classList.add("show");
-      setInlineScanStatus("lookup", "Có lỗi khi kết nối hệ thống.", "err");
+      setInlineScanStatus("lookup", "Lỗi kết nối.", "err");
     } finally {
       lkPhoneInput.disabled = false;
       lkProcessing = false;
