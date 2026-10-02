@@ -257,7 +257,6 @@
   .info-row .k{ color:var(--text-dim); }
   .info-row .v{ font-weight:600; text-align:right; }
 
-  /* ===== Countdown ===== */
   .countdown-wrap{ display:none; margin-top:16px; }
   .countdown-label{ font-size:12px; color:var(--text-dim); text-align:center; margin-bottom:8px; font-weight:600; }
   .countdown-boxes{ display:flex; gap:8px; justify-content:center; }
@@ -537,7 +536,7 @@
     }
   })();
 
-  // ==== QUÉT MÃ TỰ ĐỘNG BẰNG CAMERA - OCR CHUẨN XÁC CHUYÊN BIỆT BH-M3H2XG ====
+  // ==== QUÉT MÃ TỰ ĐỘNG BẰNG CAMERA ====
   let scanStream = null;
   let scanTargetInput = null;
   let scanContext = null;
@@ -586,7 +585,7 @@
 
   async function openScanner(){
     scanModal.classList.add("show");
-    scanStatus.textContent = "Đang khởi tạo camera...";
+    scanStatus.textContent = "Đang khởi tạo Tesseract OCR...";
     scanStatus.className = "scan-hint";
     scanFrame.classList.remove("detected");
     scanFrame.classList.add("pulsing");
@@ -596,11 +595,6 @@
     try {
       if (!tesseractWorker) {
         tesseractWorker = await Tesseract.createWorker("eng");
-        // Giới hạn bộ ký tự tuyệt đối để tránh đọc nhảy chữ lung tung
-        await tesseractWorker.setParameters({
-          tessedit_char_whitelist: "BH-M3H2XG0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
-        });
       }
 
       scanStream = await navigator.mediaDevices.getUserMedia({
@@ -630,18 +624,19 @@
     scanLoopActive = true;
     while (scanLoopActive && scanStream) {
       if (!scanBusy) await ocrTick();
-      await sleep(180);
+      await sleep(200);
     }
   }
 
-  // Tiền xử lý ảnh làm nét chữ tự nhiên (không dùng Binarization gây đứt nét)
+  // Tiền xử lý ảnh: Crop đúng khung + tăng tương phản
   function preprocessCanvas(sourceCanvas) {
     const sw = sourceCanvas.width;
     const sh = sourceCanvas.height;
 
-    const cropX = sw * 0.05;
+    // Lấy vùng giữa màn hình tương ứng với scan-frame
+    const cropX = sw * 0.08;
     const cropY = sh * 0.35;
-    const cropW = sw * 0.90;
+    const cropW = sw * 0.84;
     const cropH = sh * 0.30;
 
     const procCanvas = document.createElement("canvas");
@@ -649,7 +644,7 @@
     procCanvas.height = cropH * 2;
     const ctx = procCanvas.getContext("2d");
 
-    ctx.filter = "grayscale(100%) contrast(150%)";
+    ctx.filter = "grayscale(100%) contrast(180%) brightness(95%)";
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(sourceCanvas, cropX, cropY, cropW, cropH, 0, 0, procCanvas.width, procCanvas.height);
@@ -657,16 +652,16 @@
     return procCanvas;
   }
 
-  // Làm sạch ký tự viền hộp chữ nhật và chuẩn hóa chuỗi
+  // Làm sạch văn bản thu được từ OCR
   function cleanText(raw) {
     if (!raw) return "";
-    let txt = raw.toUpperCase().replace(/[\r\n\s]/g, "");
+    let txt = raw.toUpperCase().replace(/[\r\n]/g, " ");
     
-    // Loại bỏ viền ô nhiễu (gạch đứng, gạch ngang ở 2 đầu)
-    txt = txt.replace(/^[|_I1-]+/, "").replace(/[|_I1-]+$/, "");
+    // Thay thế các ký tự nhiễu từ khung viền
+    txt = txt.replace(/[|\/\\_]/g, "");
     
-    // Sửa các lỗi hay đọc nhầm tiền tố BH-
-    txt = txt.replace(/^B[H1I0O][-_]?/, "BH-");
+    // Chuẩn hóa một số lỗi nhầm chữ hay gặp (BH-0 -> BH-, BHO -> BH-)
+    txt = txt.replace(/BH0/g, "BH-").replace(/BHO/g, "BH-");
     
     return txt;
   }
@@ -686,16 +681,15 @@
       const { data } = await tesseractWorker.recognize(processedCanvas);
       const text = cleanText(data.text);
 
-      // Khớp chuẩn xác mã BH-M3H2XG (6 ký tự sau BH-) hoặc các độ dài mở rộng từ 4-10 ký tự
-      const match = text.match(/BH-[A-Z0-9]{6}/) || 
-                    text.match(/BH-[A-Z0-9]{4,10}/) || 
-                    text.match(/[A-Z]{2}-[A-Z0-9]{5,8}/);
+      // Regex bắt mã dạng BH-XXXXXX (ví dụ BH-M3H2XG) hoặc các mẫu mã phổ biến
+      const match = text.match(/BH-[A-Z0-9]{5,10}/) || 
+                    text.match(/[A-Z]{2}-[A-Z0-9]{5,10}/);
 
       if (match && scanLoopActive) {
         handleCodeDetected(match[0]);
       }
     } catch (err) {
-      // bỏ qua lượt lỗi
+      // Bỏ qua lỗi từng frame
     } finally {
       scanBusy = false;
     }
